@@ -141,10 +141,11 @@ impl AudioCallback for CustomAudioCallback {
         //     *x = self.phase.sin() * self.volume;
         // }
         for x in out.iter_mut() {
+            // this is doing some oscillation?
           *x = if self.phase <= 0.5 {
-              self.volume
-          } else {
               -self.volume
+          } else {
+              self.volume
           };
           self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
         }
@@ -192,21 +193,21 @@ fn run() -> Result<(), Box<dyn Error>> {
     let (audio_subsystem, desired_spec) = init_audio_out();
     let device = audio_subsystem
         .open_playback(None, &desired_spec, |spec| {
-            let mut audio_callback = CustomAudioCallback {
+            // yield this custom audio callback
+            CustomAudioCallback {
                 rx,
                 freq: 0.0,
                 phase: 0.0,
-                volume: 0.25,
-                spec_freq: desired_spec.freq.unwrap(),
-            };
-            audio_callback
+                volume: 0.0,
+                spec_freq: spec.freq,
+            }
         })
         .unwrap();
 
     loop {
         device.resume();
         input.clear();
-        stdin().read_line(&mut input); // wait for next enter key press
+        let _ = stdin().read_line(&mut input); // wait for next enter key press
         break;
     }
 
