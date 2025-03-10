@@ -9,7 +9,13 @@ with a sound module deployed onto an esp32 and outputting audio data
 - Midir: programmatic interfacing with midi devices
 - sdl2: simple audio output solution
 
-# Roadmap
+# Short term roadmap
+- More graceful error handling
+
+# Long term Roadmap
 - Loadable onto esp32 (kind of awkward since that backdoor dropped)
 - Some kind of circuitry setup to take usb-c midi and output audio piped to a female 3.5 mm or 6mm audio jack
 - MIDI thru on esp32 setup
+
+# References
+- https://en.wikipedia.org/wiki/Musical_note#MIDI
