@@ -107,7 +107,7 @@ impl fmt::Display for CustomAudioCallback {
 impl CustomAudioCallback {
     // NOTE: THIS WILL BLOCK INFINITELY
     fn receive(&mut self, out_buf: &mut [f32]) {
-        while let Ok(msg) = self.rx.recv() {
+        while let Ok(msg) = self.rx.try_recv() {
             self.handle_sound_command(msg, out_buf);
         }
     }
@@ -116,7 +116,7 @@ impl CustomAudioCallback {
         // set internal frequencies and other values based on sound command
         match sound_command {
             SoundCommand::NoteOff { freq } => {
-                if self.freq == freq {
+                if self.freq == freq && self.volume > 0.0 {
                     self.volume = 0.0
                 }
             }
@@ -125,21 +125,7 @@ impl CustomAudioCallback {
                 self.volume = volume;
             }
         }
-        // fill buffer with sounds??????
-        // for x in out_buf.iter_mut() {
-        //     self.phase += std::f32::consts::TAU * self.freq / self.spec_freq as f32;
-        //     *x = self.phase.sin() * self.volume;
-        // }
 
-        for x in out_buf.iter_mut() {
-          *x = if self.phase <= 0.5 {
-              self.volume
-          } else {
-              -self.volume
-          };
-          self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
-        }
-        println!("filled buffer???: {}", self);
     }
 }
 
@@ -148,6 +134,22 @@ impl AudioCallback for CustomAudioCallback {
 
     fn callback(&mut self, out: &mut [f32]) {
         self.receive(out);
+
+        // fill buffer with sounds??????
+        // for x in out_buf.iter_mut() {
+        //     self.phase += std::f32::consts::TAU * self.freq / self.spec_freq as f32;
+        //     *x = self.phase.sin() * self.volume;
+        // }
+        for x in out.iter_mut() {
+          *x = if self.phase <= 0.5 {
+              self.volume
+          } else {
+              -self.volume
+          };
+          self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
+        }
+        println!("self: {}", self);
+        println!("buf: {:?}", out[0..5].to_vec());
     }
 }
 
@@ -203,13 +205,10 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     loop {
         device.resume();
+        input.clear();
+        stdin().read_line(&mut input); // wait for next enter key press
+        break;
     }
 
-    /*
-    input.clear();
-    stdin().read_line(&mut input)?; // wait for next enter key press
-
-    */
-    //println!("Closing connection");
-    //Ok(())
+    Ok(())
 }
