@@ -1,7 +1,10 @@
 use std::error::Error;
-use std::io::{stdin, stdout, Write};
+use std::io::stdin;
 
 use midir::{Ignore, MidiInput};
+
+mod audio_in;
+use audio_in::get_input_port;
 
 // given a number, return the frequency required for the note
 pub fn get_freqy(i: u8) -> f32 {
@@ -91,37 +94,11 @@ fn run() -> Result<(), Box<dyn Error>> {
     midi_in.ignore(Ignore::None);
 
     // Get an input port (read from console if multiple are available)
-    let in_ports = midi_in.ports();
-    let in_port = match in_ports.len() {
-        0 => return Err("no input port found".into()),
-        1 => {
-            println!(
-                "Choosing the only available input port: {}",
-                midi_in.port_name(&in_ports[0]).unwrap()
-            );
-            &in_ports[0]
-        }
-        _ => {
-            println!("\nAvailable input ports:");
-            for (i, p) in in_ports.iter().enumerate() {
-                println!("{}: {}", i, midi_in.port_name(p).unwrap());
-            }
-            print!("Please select input port: ");
-            stdout().flush()?;
-            let mut input = String::new();
-            stdin().read_line(&mut input)?;
-            in_ports
-                .get(input.trim().parse::<usize>()?)
-                .ok_or("invalid input port selected")?
-        }
-    };
-
-    println!("\nOpening connection");
-    let in_port_name = midi_in.port_name(in_port)?;
+    let Some((in_port, in_port_name)) = get_input_port(&midi_in) else { todo!() };
 
     // _conn_in needs to be a named parameter, because it needs to be kept alive until the end of the scope
     let _conn_in = midi_in.connect(
-        in_port,
+        &in_port,
         "midir-read-input",
         move |_stamp, message, _| {
             if let Some(note) = parse_note_message(&message) {
