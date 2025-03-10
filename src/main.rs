@@ -9,6 +9,11 @@ mod audio_in;
 use audio_in::get_input_port;
 
 mod audio_out;
+use audio_out::init_audio_out;
+
+extern crate sdl2;
+
+use sdl2::{audio::{AudioCallback, AudioSpecDesired}, AudioSubsystem};
 
 // given a number, return the frequency required for the note
 pub fn get_freqy(i: u8) -> f32 {
@@ -83,18 +88,18 @@ struct CustomAudioCallback {
     freq: f32,
     phase: f32,
     volume: f32,
+    spec_freq: i32,
 }
 
 impl CustomAudioCallback {
     // NOTE: THIS WILL BLOCK INFINITELY
-    pub fn receive(&mut self) {
+    fn receive(&mut self) {
         while let Ok(msg) = self.rx.recv() {
             self.handle_sound_command(msg);
         }
     }
 
     fn handle_sound_command(&mut self, sound_command: SoundCommand) {
-
       // set internal frequencies and other values based on sound command
       match sound_command {
         SoundCommand::NoteOff { freq} => {
@@ -107,22 +112,38 @@ impl CustomAudioCallback {
           self.volume = volume;
         },
       }
-
-
       // fill buffer with sounds??????
     }
 }
+
+impl AudioCallback for CustomAudioCallback {
+  type Channel = f32;
+
+  fn callback(&mut self, out: &mut [f32]) {
+      self.receive();
+      // Generate a square wave
+      for x in out.iter_mut() {
+          /*
+          *x = if self.phase <= 0.5 {
+              self.volume
+          } else {
+              -self.volume
+          };
+          */
+
+          *x = self.phase.sin() * self.volume;
+            self.volume = self.volume * 0.98;
+            self.phase += std::f32::consts::TAU * self.freq / self.spec_freq as f32;
+      }
+  }
+}
+
 
 fn run() -> Result<(), Box<dyn Error>> {
     let (tx, rx) = channel::<SoundCommand>();
 
     let mut input = String::new();
-    let mut audio_callback = CustomAudioCallback {
-        rx,
-        freq: 0.0,
-        phase: 0.0,
-        volume: 0.0,
-    };
+
 
     let mut midi_in = MidiInput::new("midir reading input")?;
     midi_in.ignore(Ignore::None);
@@ -153,12 +174,30 @@ fn run() -> Result<(), Box<dyn Error>> {
         in_port_name
     );
 
-    audio_callback.receive();
+
+    let (audio_subsystem,desired_spec) = init_audio_out();
+    let device = audio_subsystem
+    .open_playback(None, &desired_spec, |spec| {
+        let mut audio_callback = CustomAudioCallback {
+          rx,
+          freq: 0.0,
+          phase: 0.0,
+          volume: 0.0,
+          spec_freq: desired_spec.freq.unwrap(),
+          };
+        audio_callback
+    })
+    .unwrap();
+
+    loop {
+        device.resume();
+    }
+
     /*
     input.clear();
     stdin().read_line(&mut input)?; // wait for next enter key press
 
     */
-    println!("Closing connection");
-    Ok(())
+    //println!("Closing connection");
+    //Ok(())
 }
