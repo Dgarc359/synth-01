@@ -2,6 +2,7 @@ use std::error::Error;
 use std::io::stdin;
 use std::sync::mpsc::{channel, Receiver};
 use std::thread;
+use std::fmt;
 
 use midir::{Ignore, MidiInput};
 
@@ -13,13 +14,16 @@ use audio_out::init_audio_out;
 
 extern crate sdl2;
 
-use sdl2::{audio::{AudioCallback, AudioSpecDesired}, AudioSubsystem};
+use sdl2::{
+    audio::{AudioCallback, AudioSpecDesired},
+    AudioSubsystem,
+};
 
 // given a number, return the frequency required for the note
 pub fn get_freqy(i: u8) -> f32 {
     println!("got i: {:#?}", i);
     // https://en.wikipedia.org/wiki/Musical_note#MIDI
-    return 2.0f32.powf((i as f32 - 69.0) / 12.0 ) * 440.0
+    return 2.0f32.powf((i as f32 - 69.0) / 12.0) * 440.0;
 }
 
 // thx solra for the Note and note parsing code <3
@@ -31,10 +35,13 @@ enum Note {
 
 fn note_to_sound_command(note: Note) -> SoundCommand {
     match note {
-        Note::On { note, volume, .. } => {
-            SoundCommand::NoteOn { freq: get_freqy(note), volume: volume as f32 }
+        Note::On { note, volume, .. } => SoundCommand::NoteOn {
+            freq: get_freqy(note),
+            volume: volume as f32,
         },
-        Note::Off { note, .. } => { SoundCommand::NoteOff { freq: get_freqy(note) } },
+        Note::Off { note, .. } => SoundCommand::NoteOff {
+            freq: get_freqy(note),
+        },
     }
 }
 
@@ -91,65 +98,71 @@ struct CustomAudioCallback {
     spec_freq: i32,
 }
 
+impl fmt::Display for CustomAudioCallback {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "freq: {}, phase: {}, volume: {}, spec_freq: {}", self.freq, self.phase, self.volume, self.spec_freq)
+  }
+}
+
 impl CustomAudioCallback {
     // NOTE: THIS WILL BLOCK INFINITELY
-    fn receive(&mut self) {
+    fn receive(&mut self, out_buf: &mut [f32]) {
         while let Ok(msg) = self.rx.recv() {
-            self.handle_sound_command(msg);
+            self.handle_sound_command(msg, out_buf);
         }
     }
 
-    fn handle_sound_command(&mut self, sound_command: SoundCommand) {
-      // set internal frequencies and other values based on sound command
-      match sound_command {
-        SoundCommand::NoteOff { freq} => {
-          if self.freq == freq {
-            self.volume = 0.0
-          }
-         },
-        SoundCommand::NoteOn { freq, volume} => {
-          self.freq = freq;
-          self.volume = volume;
-        },
-      }
-      // fill buffer with sounds??????
-    }
-}
+    fn handle_sound_command(&mut self, sound_command: SoundCommand, out_buf: &mut [f32]) {
+        // set internal frequencies and other values based on sound command
+        match sound_command {
+            SoundCommand::NoteOff { freq } => {
+                if self.freq == freq {
+                    self.volume = 0.0
+                }
+            }
+            SoundCommand::NoteOn { freq, volume } => {
+                self.freq = freq;
+                self.volume = volume;
+            }
+        }
+        // fill buffer with sounds??????
+        // for x in out_buf.iter_mut() {
+        //     self.phase += std::f32::consts::TAU * self.freq / self.spec_freq as f32;
+        //     *x = self.phase.sin() * self.volume;
+        // }
 
-impl AudioCallback for CustomAudioCallback {
-  type Channel = f32;
-
-  fn callback(&mut self, out: &mut [f32]) {
-      self.receive();
-      // Generate a square wave
-      for x in out.iter_mut() {
-          /*
+        for x in out_buf.iter_mut() {
           *x = if self.phase <= 0.5 {
               self.volume
           } else {
               -self.volume
           };
-          */
-
-          *x = self.phase.sin() * self.volume;
-            self.volume = self.volume * 0.98;
-            self.phase += std::f32::consts::TAU * self.freq / self.spec_freq as f32;
-      }
-  }
+          self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
+        }
+        println!("filled buffer???: {}", self);
+    }
 }
 
+impl AudioCallback for CustomAudioCallback {
+    type Channel = f32;
+
+    fn callback(&mut self, out: &mut [f32]) {
+        self.receive(out);
+    }
+}
 
 fn run() -> Result<(), Box<dyn Error>> {
     let (tx, rx) = channel::<SoundCommand>();
 
     let mut input = String::new();
 
-
     let mut midi_in = MidiInput::new("midir reading input")?;
     midi_in.ignore(Ignore::None);
 
     // Get an input port (read from console if multiple are available)
-    let Some((in_port, in_port_name)) = get_input_port(&midi_in) else { todo!() };
+    let Some((in_port, in_port_name)) = get_input_port(&midi_in) else {
+        todo!()
+    };
 
     // _conn_in needs to be a named parameter, because it needs to be kept alive until the end of the scope
     let _conn_in = midi_in.connect(
@@ -174,20 +187,19 @@ fn run() -> Result<(), Box<dyn Error>> {
         in_port_name
     );
 
-
-    let (audio_subsystem,desired_spec) = init_audio_out();
+    let (audio_subsystem, desired_spec) = init_audio_out();
     let device = audio_subsystem
-    .open_playback(None, &desired_spec, |spec| {
-        let mut audio_callback = CustomAudioCallback {
-          rx,
-          freq: 0.0,
-          phase: 0.0,
-          volume: 0.0,
-          spec_freq: desired_spec.freq.unwrap(),
-          };
-        audio_callback
-    })
-    .unwrap();
+        .open_playback(None, &desired_spec, |spec| {
+            let mut audio_callback = CustomAudioCallback {
+                rx,
+                freq: 0.0,
+                phase: 0.0,
+                volume: 0.25,
+                spec_freq: desired_spec.freq.unwrap(),
+            };
+            audio_callback
+        })
+        .unwrap();
 
     loop {
         device.resume();
