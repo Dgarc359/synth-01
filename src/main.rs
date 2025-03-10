@@ -1,10 +1,14 @@
 use std::error::Error;
 use std::io::stdin;
+use std::sync::mpsc::{channel, Receiver};
+use std::thread;
 
 use midir::{Ignore, MidiInput};
 
 mod audio_in;
 use audio_in::get_input_port;
+
+mod audio_out;
 
 // given a number, return the frequency required for the note
 pub fn get_freqy(i: u8) -> f32 {
@@ -13,40 +17,20 @@ pub fn get_freqy(i: u8) -> f32 {
     return 2.0f32.powf((i as f32 - 69.0) / 12.0 ) * 440.0
 }
 
-
-// https://github.com/Rust-SDL2/rust-sdl2/blob/master/examples/audio-squarewave.rs
-extern crate sdl2;
-
-use sdl2::audio::{AudioCallback, AudioSpecDesired};
-use std::time::Duration;
-
-struct SquareWave {
-    phase_inc: f32,
-    phase: f32,
-    volume: f32,
-}
-
-impl AudioCallback for SquareWave {
-    type Channel = f32;
-
-    fn callback(&mut self, out: &mut [f32]) {
-        // Generate a square wave
-        for x in out.iter_mut() {
-            *x = if self.phase <= 0.5 {
-                self.volume
-            } else {
-                -self.volume
-            };
-            self.phase = (self.phase + self.phase_inc) % 1.0;
-        }
-    }
-}
-
 // thx solra for the Note and note parsing code <3
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 enum Note {
     On { channel: u8, volume: u8, note: u8 },
     Off { channel: u8, note: u8 },
+}
+
+fn note_to_sound_command(note: Note) -> SoundCommand {
+    match note {
+        Note::On { note, volume, .. } => {
+            SoundCommand::NoteOn { freq: get_freqy(note), volume: volume as f32 }
+        },
+        Note::Off { note, .. } => { SoundCommand::NoteOff { freq: get_freqy(note) } },
+    }
 }
 
 fn parse_note_message(message: &[u8]) -> Option<Note> {
@@ -87,8 +71,58 @@ fn main() {
     }
 }
 
+#[derive(Debug)]
+enum SoundCommand {
+    NoteOn { freq: f32, volume: f32 },
+    NoteOff { freq: f32 },
+}
+
+#[derive(Debug)]
+struct CustomAudioCallback {
+    rx: Receiver<SoundCommand>,
+    freq: f32,
+    phase: f32,
+    volume: f32,
+}
+
+impl CustomAudioCallback {
+    // NOTE: THIS WILL BLOCK INFINITELY
+    pub fn receive(&mut self) {
+        while let Ok(msg) = self.rx.recv() {
+            self.handle_sound_command(msg);
+        }
+    }
+
+    fn handle_sound_command(&mut self, sound_command: SoundCommand) {
+
+      // set internal frequencies and other values based on sound command
+      match sound_command {
+        SoundCommand::NoteOff { freq} => {
+          if self.freq == freq {
+            self.volume = 0.0
+          }
+         },
+        SoundCommand::NoteOn { freq, volume} => {
+          self.freq = freq;
+          self.volume = volume;
+        },
+      }
+
+
+      // fill buffer with sounds??????
+    }
+}
+
 fn run() -> Result<(), Box<dyn Error>> {
+    let (tx, rx) = channel::<SoundCommand>();
+
     let mut input = String::new();
+    let mut audio_callback = CustomAudioCallback {
+        rx,
+        freq: 0.0,
+        phase: 0.0,
+        volume: 0.0,
+    };
 
     let mut midi_in = MidiInput::new("midir reading input")?;
     midi_in.ignore(Ignore::None);
@@ -101,58 +135,14 @@ fn run() -> Result<(), Box<dyn Error>> {
         &in_port,
         "midir-read-input",
         move |_stamp, message, _| {
-            if let Some(note) = parse_note_message(&message) {
-                match note {
-                    Note::On { note, .. } => {
-                        println!("got note {:#?}", note);
-                        let sdl_context = sdl2::init().unwrap();
-                        let audio_subsystem = sdl_context.audio().unwrap();
-                        let desired_spec = AudioSpecDesired {
-                            freq: Some(44_100),
-                            channels: Some(1), // mono
-                            samples: None,     // default sample size
-                        };
-                        let device = audio_subsystem
-                            .open_playback(None, &desired_spec, |spec| {
-                                // Show obtained AudioSpec
-                                println!("{:?}", spec);
-                                let note_freq = get_freqy(note);
-                                println!("got note frequency: {:#?}", note_freq);
+            if let Some(parsed_note) = parse_note_message(&message) {
+                let sound_command = note_to_sound_command(parsed_note);
 
-                                // initialize the audio callback
-                                SquareWave {
-                                    //phase_inc: 440.0 / spec.freq as f32,
-                                    phase_inc: note_freq / spec.freq as f32,
-                                    phase: 0.0,
-                                    volume: 0.25,
-                                }
-                            })
-                            .unwrap();
+                let tx = tx.clone();
 
-                        let device_two = audio_subsystem
-                            .open_playback(None, &desired_spec, |spec| {
-                                let new_note = note + 3;
-                                // Show obtained AudioSpec
-                                println!("{:?}", spec);
-                                let note_freq = get_freqy(new_note);
-                                println!("got note frequency: {:#?}", note_freq);
-
-                                // initialize the audio callback
-                                SquareWave {
-                                    //phase_inc: 440.0 / spec.freq as f32,
-                                    phase_inc: note_freq / spec.freq as f32,
-                                    phase: 0.0,
-                                    volume: 0.25,
-                                }
-                            })
-                            .unwrap();
-                        device_two.resume();
-                        device.resume();
-                        std::thread::sleep(Duration::from_millis(10));
-                        ()
-                    }
-                    Note::Off { .. } => { () }
-                }
+                thread::spawn(move || {
+                    tx.send(sound_command).unwrap();
+                });
             }
         },
         (),
@@ -163,9 +153,12 @@ fn run() -> Result<(), Box<dyn Error>> {
         in_port_name
     );
 
+    audio_callback.receive();
+    /*
     input.clear();
     stdin().read_line(&mut input)?; // wait for next enter key press
 
+    */
     println!("Closing connection");
     Ok(())
 }
