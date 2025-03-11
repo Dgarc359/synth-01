@@ -19,3 +19,15 @@ with a sound module deployed onto an esp32 and outputting audio data
 
 # References
 - https://en.wikipedia.org/wiki/Musical_note#MIDI
+
+# Troubleshooting
+
+#### (windows) Compatibility with CMake < 3.5 has been remove from CMake
+
+This error seems possible with CMake version 4.0.0-rc3 (AT LEAST) installed on
+a windows system with their msi installer method.
+
+> [!TIP]
+> Install a `3.x` version of CMake on your windows system
+>
+> Known working [version](https://github.com/Kitware/CMake/releases/tag/v3.31.5)
