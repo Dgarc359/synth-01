@@ -117,16 +117,29 @@ impl CustomAudioCallback {
         match sound_command {
             SoundCommand::NoteOff { freq } => {
                 if self.freq == freq && self.volume > 0.0 {
-                    self.volume = 0.0
+                    self.volume = 0.0;
                 }
             }
             SoundCommand::NoteOn { freq, volume } => {
                 self.freq = freq;
-                self.volume = volume;
+                let vol_result = volume / 10_000.0_f32;
+                self.volume = vol_result.max(0.01_f32).min(0.02_f32);
             }
         }
 
     }
+}
+
+fn square_wave(phase: f32, volume: f32) -> f32 {
+    if phase <= 0.5 {
+        -volume
+    } else {
+        volume
+    }
+}
+
+fn solra_wave(phase: f32, volume: f32) -> f32 {
+    return phase.sin() * volume;
 }
 
 impl AudioCallback for CustomAudioCallback {
@@ -135,19 +148,13 @@ impl AudioCallback for CustomAudioCallback {
     fn callback(&mut self, out: &mut [f32]) {
         self.receive(out);
 
-        // fill buffer with sounds??????
-        // for x in out_buf.iter_mut() {
-        //     self.phase += std::f32::consts::TAU * self.freq / self.spec_freq as f32;
-        //     *x = self.phase.sin() * self.volume;
-        // }
         for x in out.iter_mut() {
-            // this is doing some oscillation?
-          *x = if self.phase <= 0.5 {
-              -self.volume
-          } else {
-              self.volume
-          };
-          self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
+            // TODO: real time switching between the two
+            // *x = square_wave(self.phase, self.volume);
+            // self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
+
+            *x = solra_wave(self.phase, self.volume);
+            self.phase += std::f32::consts::TAU * self.freq / self.spec_freq as f32;
         }
         println!("self: {}", self);
         println!("buf: {:?}", out[0..5].to_vec());
