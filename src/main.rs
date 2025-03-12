@@ -115,11 +115,9 @@ impl CustomAudioCallback {
                 *x = 0.0;
             }
         } else if self.currently_playing_waveforms.len() >= 1 {
-            let frequencies: Vec<f32> = self.currently_playing_waveforms.iter().map(|note| {
-                return get_freqy(*note)
-            }).collect();
+            self.currently_playing_waveforms.iter().for_each(|note| {
+                let frequency = get_freqy(*note);
             
-            for frequency in frequencies.iter() {
                 let starter_phase = self.phase;
                 let mut new_x: Vec<f32> = vec![];
 
@@ -146,7 +144,7 @@ impl CustomAudioCallback {
                 }
 
                 self.phase = starter_phase;
-            }
+            });
         }
     }
 
