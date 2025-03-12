@@ -27,11 +27,11 @@ impl AudioCallback for SquareWave {
     }
 }
 
-pub fn init_audio_out()-> (AudioSubsystem, AudioSpecDesired) {
+pub fn init_audio_out(samples_per_second: Option<i32>)-> (AudioSubsystem, AudioSpecDesired) {
     let sdl_context = sdl2::init().unwrap();
     let audio_subsystem = sdl_context.audio().unwrap();
     let desired_spec = AudioSpecDesired {
-        freq: Some(44_100),
+        freq: samples_per_second, // default is usually 44_100
         channels: Some(1), // mono
         samples: None,     // default sample size
     };

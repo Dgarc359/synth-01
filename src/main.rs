@@ -114,27 +114,38 @@ impl CustomAudioCallback {
             for x in out.iter_mut() {
                 *x = 0.0;
             }
-        } else if self.currently_playing_waveforms.len() == 1 {
-            for x in out.iter_mut() {
-                // TODO: real time switching between the two
-                // *x = square_wave(self.phase, self.volume);
-                // self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
-                *x =  solra_wave(self.phase, self.volume);
-                self.phase += std::f32::consts::TAU * self.freq / self.spec_freq as f32;
-            }
-        } else if self.currently_playing_waveforms.len() > 1 {
+        } else if self.currently_playing_waveforms.len() >= 1 {
             let frequencies: Vec<f32> = self.currently_playing_waveforms.iter().map(|note| {
                 return get_freqy(*note)
             }).collect();
             
             for frequency in frequencies.iter() {
+                let starter_phase = self.phase;
+                let mut new_x: Vec<f32> = vec![];
+
                 for x in out.iter_mut() {
                     // TODO: real time switching between the two
                     // *x = square_wave(self.phase, self.volume);
                     // self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
-                    *x += solra_wave(self.phase, self.volume);
+                    // *x += solra_wave(self.phase, self.volume);
+                    let x_val = *x + solra_wave(self.phase, self.volume);
+                    new_x.push(x_val);
                     self.phase += std::f32::consts::TAU * frequency / self.spec_freq as f32;
                 }
+                
+                // normalization logic https://www.reddit.com/r/learnrust/comments/16glmwa/comment/k08rsv2
+                let norm = new_x
+                    .iter()
+                    .fold(0., |sum, &num| sum + num.powf(2.0))
+                    .sqrt();
+                // todo: handle norm == 0
+                new_x = new_x.iter().map(|&b| b / norm).collect();
+
+                for (i, x) in out.iter_mut().enumerate() {
+                    *x += new_x[i];
+                }
+
+                self.phase = starter_phase;
             }
         }
     }
@@ -227,7 +238,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         in_port_name
     );
 
-    let (audio_subsystem, desired_spec) = init_audio_out();
+    let (audio_subsystem, desired_spec) = init_audio_out(Some(44_100));
     let device = audio_subsystem
         .open_playback(None, &desired_spec, |spec| {
             // yield this custom audio callback
