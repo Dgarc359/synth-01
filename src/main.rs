@@ -14,14 +14,10 @@ use audio_out::init_audio_out;
 
 extern crate sdl2;
 
-use sdl2::{
-    audio::{AudioCallback, AudioSpecDesired},
-    AudioSubsystem,
-};
+use sdl2::audio::AudioCallback;
 
 // given a number, return the frequency required for the note
 pub fn get_freqy(i: u8) -> f32 {
-    println!("got i: {:#?}", i);
     // https://en.wikipedia.org/wiki/Musical_note#MIDI
     return 2.0f32.powf((i as f32 - 69.0) / 12.0) * 440.0;
 }
@@ -36,10 +32,12 @@ enum Note {
 fn note_to_sound_command(note: Note) -> SoundCommand {
     match note {
         Note::On { note, volume, .. } => SoundCommand::NoteOn {
+            midi_note: note,
             freq: get_freqy(note),
             volume: volume as f32,
         },
         Note::Off { note, .. } => SoundCommand::NoteOff {
+            midi_note: note,
             freq: get_freqy(note),
         },
     }
@@ -51,14 +49,13 @@ fn parse_note_message(message: &[u8]) -> Option<Note> {
     };
     let channel = message[0] & 15;
     let command = message[0] >> 4;
-    println!("channel: {}, command: {}", channel, command);
+    println!("note: {}, channel: {}, command: {}", message[1], channel, command);
     match command {
         8 => Some(Note::Off {
             channel,
             note: message[1],
         }),
         9 if message.len() >= 3 => {
-            //println!("handling command 9 with message: {:#?}", message);
             if message[2] == 0 {
                 Some(Note::Off {
                     channel,
@@ -85,13 +82,14 @@ fn main() {
 
 #[derive(Debug)]
 enum SoundCommand {
-    NoteOn { freq: f32, volume: f32 },
-    NoteOff { freq: f32 },
+    NoteOn { midi_note: u8, freq: f32, volume: f32 },
+    NoteOff { midi_note: u8, freq: f32 },
 }
 
 #[derive(Debug)]
 struct CustomAudioCallback {
     rx: Receiver<SoundCommand>,
+    currently_playing_waveforms: Vec<u8>,
     freq: f32,
     phase: f32,
     volume: f32,
@@ -105,28 +103,48 @@ impl fmt::Display for CustomAudioCallback {
 }
 
 impl CustomAudioCallback {
-    // NOTE: THIS WILL BLOCK INFINITELY
-    fn receive(&mut self, out_buf: &mut [f32]) {
+    fn receive(&mut self) {
         while let Ok(msg) = self.rx.try_recv() {
-            self.handle_sound_command(msg, out_buf);
+            self.handle_sound_command(msg);
         }
     }
 
-    fn handle_sound_command(&mut self, sound_command: SoundCommand, out_buf: &mut [f32]) {
+    fn modify_buffer(&mut self, out: &mut [f32]) {
+        for x in out.iter_mut() {
+            // TODO: real time switching between the two
+            // *x = square_wave(self.phase, self.volume);
+            // self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
+            *x =  solra_wave(self.phase, self.volume);
+            self.phase += std::f32::consts::TAU * self.freq / self.spec_freq as f32;
+        }
+    }
+
+    fn handle_sound_command(&mut self, sound_command: SoundCommand) {
         // set internal frequencies and other values based on sound command
         match sound_command {
-            SoundCommand::NoteOff { freq } => {
-                if self.freq == freq && self.volume > 0.0 {
+            SoundCommand::NoteOff { freq , midi_note } => {
+                if let Some(index_of_note) = self.currently_playing_waveforms.iter().position(|&note| note == midi_note) {
+                    self.freq -= freq.max(0.0_f32);
+                    self.currently_playing_waveforms.remove(index_of_note);
+                }
+
+                if self.currently_playing_waveforms.len() == 0 {
                     self.volume = 0.0;
                 }
             }
-            SoundCommand::NoteOn { freq, volume } => {
-                self.freq = freq;
-                let vol_result = volume / 10_000.0_f32;
-                self.volume = vol_result.max(0.01_f32).min(0.02_f32);
+            SoundCommand::NoteOn { freq, volume, midi_note } => {
+                if self.currently_playing_waveforms.contains(&midi_note) {
+                    // do nothing??
+                } else {
+                    self.freq += freq;
+                    let vol_result = volume / 10_000.0_f32;
+                    self.volume = vol_result.max(0.01_f32).min(0.02_f32).max(0.0_f32);
+                    self.currently_playing_waveforms.push(midi_note);
+                }
             }
         }
 
+        println!("finished handling sound command: {}", self.freq);
     }
 }
 
@@ -146,16 +164,9 @@ impl AudioCallback for CustomAudioCallback {
     type Channel = f32;
 
     fn callback(&mut self, out: &mut [f32]) {
-        self.receive(out);
+        self.receive();
+        self.modify_buffer(out);
 
-        for x in out.iter_mut() {
-            // TODO: real time switching between the two
-            // *x = square_wave(self.phase, self.volume);
-            // self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
-
-            *x = solra_wave(self.phase, self.volume);
-            self.phase += std::f32::consts::TAU * self.freq / self.spec_freq as f32;
-        }
         println!("self: {}", self);
         println!("buf: {:?}", out[0..5].to_vec());
     }
@@ -203,6 +214,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             // yield this custom audio callback
             CustomAudioCallback {
                 rx,
+                currently_playing_waveforms: vec![],
                 freq: 0.0,
                 phase: 0.0,
                 volume: 0.0,
