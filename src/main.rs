@@ -142,7 +142,7 @@ impl CustomAudioCallback {
                 new_x = new_x.iter().map(|&b| b / norm).collect();
 
                 for (i, x) in out.iter_mut().enumerate() {
-                    *x += new_x[i];
+                    *x = new_x[i];
                 }
 
                 self.phase = starter_phase;
