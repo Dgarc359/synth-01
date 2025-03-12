@@ -110,12 +110,32 @@ impl CustomAudioCallback {
     }
 
     fn modify_buffer(&mut self, out: &mut [f32]) {
-        for x in out.iter_mut() {
-            // TODO: real time switching between the two
-            // *x = square_wave(self.phase, self.volume);
-            // self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
-            *x =  solra_wave(self.phase, self.volume);
-            self.phase += std::f32::consts::TAU * self.freq / self.spec_freq as f32;
+        if self.currently_playing_waveforms.len() == 0 {
+            for x in out.iter_mut() {
+                *x = 0.0;
+            }
+        } else if self.currently_playing_waveforms.len() == 1 {
+            for x in out.iter_mut() {
+                // TODO: real time switching between the two
+                // *x = square_wave(self.phase, self.volume);
+                // self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
+                *x =  solra_wave(self.phase, self.volume);
+                self.phase += std::f32::consts::TAU * self.freq / self.spec_freq as f32;
+            }
+        } else if self.currently_playing_waveforms.len() > 1 {
+            let frequencies: Vec<f32> = self.currently_playing_waveforms.iter().map(|note| {
+                return get_freqy(*note)
+            }).collect();
+            
+            for frequency in frequencies.iter() {
+                for x in out.iter_mut() {
+                    // TODO: real time switching between the two
+                    // *x = square_wave(self.phase, self.volume);
+                    // self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
+                    *x += solra_wave(self.phase, self.volume);
+                    self.phase += std::f32::consts::TAU * frequency / self.spec_freq as f32;
+                }
+            }
         }
     }
 
@@ -124,7 +144,7 @@ impl CustomAudioCallback {
         match sound_command {
             SoundCommand::NoteOff { freq , midi_note } => {
                 if let Some(index_of_note) = self.currently_playing_waveforms.iter().position(|&note| note == midi_note) {
-                    self.freq -= freq.max(0.0_f32);
+                    self.freq = (self.freq - freq).max(0.0_f32);
                     self.currently_playing_waveforms.remove(index_of_note);
                 }
 
@@ -168,7 +188,6 @@ impl AudioCallback for CustomAudioCallback {
         self.modify_buffer(out);
 
         println!("self: {}", self);
-        println!("buf: {:?}", out[0..5].to_vec());
     }
 }
 
