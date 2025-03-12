@@ -117,8 +117,7 @@ impl CustomAudioCallback {
         } else if self.currently_playing_waveforms.len() >= 1 {
             self.currently_playing_waveforms.iter().for_each(|note| {
                 let frequency = get_freqy(*note);
-            
-                let starter_phase = self.phase;
+
                 let mut new_x: Vec<f32> = vec![];
 
                 for x in out.iter_mut() {
@@ -132,18 +131,22 @@ impl CustomAudioCallback {
                 }
                 
                 // normalization logic https://www.reddit.com/r/learnrust/comments/16glmwa/comment/k08rsv2
+                // todo: handle norm == 0
                 let norm = new_x
                     .iter()
                     .fold(0., |sum, &num| sum + num.powf(2.0))
                     .sqrt();
-                // todo: handle norm == 0
-                new_x = new_x.iter().map(|&b| b / norm).collect();
 
                 for (i, x) in out.iter_mut().enumerate() {
-                    *x = new_x[i];
+                    *x = new_x[i] / norm;
                 }
 
-                self.phase = starter_phase;
+                // original, clean sounding wave
+                // if we want to have a single voice. We can switch to this
+                // for x in out.iter_mut() {
+                //     *x =  solra_wave(self.phase, self.volume);
+                //     self.phase += std::f32::consts::TAU * frequency / self.spec_freq as f32;
+                // }
             });
         }
     }
