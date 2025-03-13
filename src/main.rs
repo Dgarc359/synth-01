@@ -5,16 +5,12 @@ use std::thread;
 
 use midir::{Ignore, MidiInput};
 
-mod audio_in;
-use audio_in::get_input_port;
-
 mod audio_out;
-use audio_out::{init_audio_out, SoundCommand, CustomAudioCallback};
-
-mod util;
-
+mod audio_in;
+mod audio_waves;
 mod note;
-use note::Note;
+mod midi;
+mod util;
 
 
 fn main() {
@@ -25,7 +21,7 @@ fn main() {
 }
 
 fn run() -> Result<(), Box<dyn Error>> {
-    let (tx, rx) = channel::<SoundCommand>();
+    let (tx, rx) = channel::<crate::midi::SoundCommand>();
 
     let mut input = String::new();
 
@@ -33,7 +29,7 @@ fn run() -> Result<(), Box<dyn Error>> {
     midi_in.ignore(Ignore::None);
 
     // Get an input port (read from console if multiple are available)
-    let Some((in_port, in_port_name)) = get_input_port(&midi_in) else {
+    let Some((in_port, in_port_name)) = crate::audio_in::get_input_port(&midi_in) else {
         todo!()
     };
 
@@ -42,8 +38,8 @@ fn run() -> Result<(), Box<dyn Error>> {
         &in_port,
         "midir-read-input",
         move |_stamp, message, _| {
-            if let Some(parsed_note) = Note::from_buffer(&message) {
-                let sound_command = SoundCommand::from_note(parsed_note);
+            if let Some(parsed_note) = crate::note::Note::from_buffer(&message) {
+                let sound_command = crate::midi::SoundCommand::from_note(parsed_note);
 
                 let tx = tx.clone();
 
@@ -60,11 +56,11 @@ fn run() -> Result<(), Box<dyn Error>> {
         in_port_name
     );
 
-    let (audio_subsystem, desired_spec) = init_audio_out(Some(44_100));
+    let (audio_subsystem, desired_spec) = crate::audio_out::init_audio_out(Some(44_100));
     let device = audio_subsystem
         .open_playback(None, &desired_spec, |spec| {
             // yield this custom audio callback
-            CustomAudioCallback {
+            crate::audio_out::CustomAudioCallback {
                 rx,
                 currently_playing_waveforms: vec![],
                 freq: 0.0,

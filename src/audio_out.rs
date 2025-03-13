@@ -6,9 +6,15 @@ use sdl2::{audio::{AudioCallback, AudioSpecDesired}, AudioSubsystem};
 use std::sync::mpsc::Receiver;
 use std::fmt;
 
-use crate::{util::get_freqy, Note};
+use crate::{util::get_freqy, midi::SoundCommand};
 
 
+/**
+ * Uses sdl2 to create an audio subsystem and a default desired audio spec
+ * 
+ * The audio spec defines how many samples per second are used when creating an audio
+ * waveform
+ */
 pub fn init_audio_out(samples_per_second: Option<i32>)-> (AudioSubsystem, AudioSpecDesired) {
     let sdl_context = sdl2::init().unwrap();
     let audio_subsystem = sdl_context.audio().unwrap();
@@ -22,30 +28,14 @@ pub fn init_audio_out(samples_per_second: Option<i32>)-> (AudioSubsystem, AudioS
 }
 
 
-#[derive(Debug)]
-pub enum SoundCommand {
-    NoteOn { midi_note: u8, freq: f32, volume: f32 },
-    NoteOff { midi_note: u8, freq: f32 },
-}
-
-impl SoundCommand {
-    pub fn from_note(note: Note) -> SoundCommand {
-        match note {
-            Note::On { note, volume, .. } => SoundCommand::NoteOn {
-                midi_note: note,
-                freq: get_freqy(note),
-                volume: volume as f32,
-            },
-            Note::Off { note, .. } => SoundCommand::NoteOff {
-                midi_note: note,
-                freq: get_freqy(note),
-            },
-        }
-    }
-}
-
-
-
+/**
+ * Custom audio callback contains:
+ * 
+ * rx: Receiver, which will ingest any new SoundCommands. Recall that a sound command is a midi note with an attached frequency
+ * 
+ * currently_playing_waveforms: An array containing the midi notes currently being played
+ * 
+ */
 #[derive(Debug)]
 pub struct CustomAudioCallback {
     pub rx: Receiver<SoundCommand>,
@@ -60,6 +50,17 @@ impl fmt::Display for CustomAudioCallback {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     write!(f, "freq: {}, phase: {}, volume: {}, spec_freq: {}", self.freq, self.phase, self.volume, self.spec_freq)
   }
+}
+
+impl AudioCallback for CustomAudioCallback {
+    type Channel = f32;
+
+    fn callback(&mut self, out: &mut [f32]) {
+        self.receive();
+        self.modify_buffer(out);
+
+        println!("self: {}", self);
+    }
 }
 
 impl CustomAudioCallback {
@@ -78,35 +79,37 @@ impl CustomAudioCallback {
             self.currently_playing_waveforms.iter().for_each(|note| {
                 let frequency = get_freqy(*note);
 
-                // let mut new_x: Vec<f32> = vec![];
+                let mut new_x: Vec<f32> = vec![];
 
-                // let mut sum = 0.;
-                // for x in out.iter_mut() {
-                //     // TODO: real time switching between the two
-                //     // *x = square_wave(self.phase, self.volume);
-                //     // self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
-                //     // *x += solra_wave(self.phase, self.volume);
+                let mut sum = 0.;
+                for x in out.iter_mut() {
+                    // TODO: real time switching between the two
+                    // *x = square_wave(self.phase, self.volume);
+                    // self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
+                    // *x += solra_wave(self.phase, self.volume);
 
-                //     let x_val = *x + solra_wave(self.phase, self.volume);
-                //     new_x.push(x_val);
-                //     self.phase += std::f32::consts::TAU * frequency / self.spec_freq as f32;
-                //     sum += x_val.powf(2.);
-                // }
+                    let x_val = *x + crate::audio_waves::solra_wave(self.phase, self.volume);
+                    new_x.push(x_val);
+                    self.phase += std::f32::consts::TAU * frequency / self.spec_freq as f32;
+
+                    // sum gets used for finding 'norm'
+                    sum += x_val.powf(2.);
+                }
                 
-                // // normalization logic https://www.reddit.com/r/learnrust/comments/16glmwa/comment/k08rsv2
-                // // todo: handle norm == 0
-                // let norm = sum.sqrt();
+                // normalization logic https://www.reddit.com/r/learnrust/comments/16glmwa/comment/k08rsv2
+                // todo: handle norm == 0
+                let norm = sum.sqrt();
 
-                // for (i, x) in out.iter_mut().enumerate() {
-                //     *x = new_x[i] / norm;
-                // }
+                for (i, x) in out.iter_mut().enumerate() {
+                    *x = new_x[i] / norm;
+                }
 
                 // original, clean sounding wave
                 // if we want to have a single voice. We can switch to this
-                for x in out.iter_mut() {
-                    *x =  solra_wave(self.phase, self.volume);
-                    self.phase += std::f32::consts::TAU * frequency / self.spec_freq as f32;
-                }
+                // for x in out.iter_mut() {
+                //     *x =  crate::audio_waves::solra_wave(self.phase, self.volume);
+                //     self.phase += std::f32::consts::TAU * frequency / self.spec_freq as f32;
+                // }
             });
         }
     }
@@ -138,28 +141,5 @@ impl CustomAudioCallback {
         }
 
         println!("finished handling sound command: {}", self.freq);
-    }
-}
-
-fn square_wave(phase: f32, volume: f32) -> f32 {
-    if phase <= 0.5 {
-        -volume
-    } else {
-        volume
-    }
-}
-
-fn solra_wave(phase: f32, volume: f32) -> f32 {
-    return phase.sin() * volume;
-}
-
-impl AudioCallback for CustomAudioCallback {
-    type Channel = f32;
-
-    fn callback(&mut self, out: &mut [f32]) {
-        self.receive();
-        self.modify_buffer(out);
-
-        println!("self: {}", self);
     }
 }

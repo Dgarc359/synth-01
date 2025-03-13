@@ -1,5 +1,3 @@
-use crate::{util::get_freqy,SoundCommand};
-
 // thx solra for the Note and note parsing code <3
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Note {
