@@ -6,7 +6,7 @@ use sdl2::{audio::{AudioCallback, AudioSpecDesired}, AudioSubsystem};
 use std::sync::mpsc::Receiver;
 use std::fmt;
 
-use crate::{util::get_freqy, midi::SoundCommand};
+use crate::{audio_waves::sin_wave, midi::SoundCommand, util::get_freqy};
 
 
 /**
@@ -41,14 +41,14 @@ pub struct CustomAudioCallback {
     pub rx: Receiver<SoundCommand>,
     pub currently_playing_waveforms: Vec<u8>,
     pub freq: f32,
-    pub phase: f32,
+    pub phase_angle: f32,
     pub volume: f32,
     pub spec_freq: i32,
 }
 
 impl fmt::Display for CustomAudioCallback {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "freq: {}, phase: {}, volume: {}, spec_freq: {}", self.freq, self.phase, self.volume, self.spec_freq)
+    write!(f, "freq: {}, phase_angle: {}, amplitude: {}, spec_freq: {}", self.freq, self.phase_angle, self.volume, self.spec_freq)
   }
 }
 
@@ -59,7 +59,7 @@ impl AudioCallback for CustomAudioCallback {
         self.receive();
         self.modify_buffer(out);
 
-        println!("self: {}", self);
+        println!("self: {}, first 5 outbuf: {:#?}", self, out[0..5].to_vec());
     }
 }
 
@@ -76,46 +76,46 @@ impl CustomAudioCallback {
                 *x = 0.0;
             }
         } else if self.currently_playing_waveforms.len() >= 1 {
-            self.currently_playing_waveforms.iter().for_each(|note| {
-                let frequency = get_freqy(*note);
+            let out_clone = out.to_vec();
 
-                let mut new_x: Vec<f32> = vec![];
+            let note_buffers: Vec<Vec<f32>> = self.currently_playing_waveforms
+                .iter()
+                .map(|note|  {
+                    let mut new_x: Vec<f32> = vec![];
+                    let frequency = get_freqy(*note);
 
-                let mut sum = 0.;
-                for x in out.iter_mut() {
-                    // TODO: real time switching between the two
-                    // *x = square_wave(self.phase, self.volume);
-                    // self.phase = (self.phase + (self.freq / self.spec_freq as f32)) % 1.0;
-                    // *x += solra_wave(self.phase, self.volume);
+                    for (i, x) in out_clone.iter().enumerate() {
+                        let val =  std::f32::consts::TAU * frequency * (i as f32 / self.spec_freq as f32);
+                        new_x.push((val % std::f32::consts::TAU).sin());
 
-                    let x_val = *x + crate::audio_waves::solra_wave(self.phase, self.volume);
-                    new_x.push(x_val);
-                    self.phase += std::f32::consts::TAU * frequency / self.spec_freq as f32;
+                        // self.phase_angle += val;
+                        // self.phase_angle = self.phase_angle % std::f32::consts::TAU;
+                    }
 
-                    // sum gets used for finding 'norm'
-                    sum += x_val.powf(2.);
-                }
-                
-                // normalization logic https://www.reddit.com/r/learnrust/comments/16glmwa/comment/k08rsv2
-                // todo: handle norm == 0
-                let norm = sum.sqrt();
+                    // original, clean sounding wave
+                    // if we want to have a single voice. We can switch to this
+                    // for (i, x) in out.iter_mut().enumerate() {
+                    //     *x =  crate::audio_waves::sin_wave(self.phase_angle, self.volume);
+                    //     self.phase_angle += std::f32::consts::TAU * frequency / self.spec_freq as f32;
+                    //     self.phase_angle = self.phase_angle % std::f32::consts::TAU;
+                    // }
 
-                for (i, x) in out.iter_mut().enumerate() {
-                    *x = new_x[i] / norm;
-                }
+                    new_x
+                })
+                .collect();
 
-                // original, clean sounding wave
-                // if we want to have a single voice. We can switch to this
-                // for x in out.iter_mut() {
-                //     *x =  crate::audio_waves::solra_wave(self.phase, self.volume);
-                //     self.phase += std::f32::consts::TAU * frequency / self.spec_freq as f32;
-                // }
-            });
+            for (i, x) in out.iter_mut().enumerate() {
+                for note_buffer in note_buffers.clone() {
+                    *x += note_buffer[i]
+                };
+
+                *x = *x * self.volume;
+            }
         }
     }
 
     fn handle_sound_command(&mut self, sound_command: SoundCommand) {
-        self.phase = 0.;
+        // self.phase_angle = 0.;
         // set internal frequencies and other values based on sound command
         match sound_command {
             SoundCommand::NoteOff { freq , midi_note } => {
@@ -134,7 +134,7 @@ impl CustomAudioCallback {
                 } else {
                     self.freq += freq;
                     let vol_result = volume / 10_000.0_f32;
-                    self.volume = vol_result.max(0.01_f32).min(0.02_f32).max(0.0_f32);
+                    self.volume = vol_result.max(0.05_f32).min(0.05_f32).max(0.0_f32);
                     self.currently_playing_waveforms.push(midi_note);
                 }
             }

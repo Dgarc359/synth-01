@@ -6,6 +6,6 @@ pub fn square_wave(phase: f32, volume: f32) -> f32 {
     }
 }
 
-pub fn solra_wave(phase: f32, volume: f32) -> f32 {
+pub fn sin_wave(phase: f32, volume: f32) -> f32 {
     return phase.sin() * volume;
 }

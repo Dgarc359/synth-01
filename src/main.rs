@@ -64,7 +64,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 rx,
                 currently_playing_waveforms: vec![],
                 freq: 0.0,
-                phase: 0.0,
+                phase_angle: 0.0,
                 volume: 0.0,
                 spec_freq: spec.freq,
             }
