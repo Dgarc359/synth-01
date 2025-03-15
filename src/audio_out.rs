@@ -6,7 +6,7 @@ use sdl2::{audio::{AudioCallback, AudioSpecDesired}, AudioSubsystem};
 use std::sync::mpsc::{Receiver, Sender};
 use std::fmt;
 
-use crate::{audio_waves::sin_wave, midi::SoundCommand, util::get_freqy};
+use crate::{audio_waves::sin_wave, midi::{self, SoundCommand, Wave}, util::get_freqy};
 
 use chrono::prelude::{DateTime, Utc};
 use std::time::{Duration, SystemTime};
@@ -49,12 +49,13 @@ pub struct CustomAudioCallback {
     pub rx: Receiver<SoundCommand>,
     // forward audio buffer for downstream consumers
     pub tx: Sender<Vec<f32>>,
-    pub currently_playing_waveforms: Vec<u8>,
+    pub currently_playing_waveforms: Vec<midi::Wave>,
     pub freq: f32,
     pub phase_angle: f32,
     pub volume: f32,
     pub spec_freq: i32,
 }
+
 
 impl fmt::Display for CustomAudioCallback {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -95,10 +96,10 @@ impl CustomAudioCallback {
             let volume_bias = 0.5;
 
             let waves: Vec<Vec<f32>> = self.currently_playing_waveforms
-                .iter()
+                .iter_mut()
                 .map(|note|  {
                     let mut wave: Vec<f32> = vec![];
-                    let frequency = get_freqy(*note);
+                    // let frequency = get_freqy(*note);
 
                     // for (i, x) in out_clone.iter().enumerate() {
                     //     // new_x.push(crate::audio_waves::sin_wave(self.phase_angle, self.volume));
@@ -110,12 +111,17 @@ impl CustomAudioCallback {
                     // }
 
 
+                    
                     // original, clean sounding wave
                     // if we want to have a single voice. We can switch to this
+
                     for (_, _) in out_clone.iter().enumerate() {
-                        wave.push(crate::audio_waves::sin_wave(self.phase_angle, self.volume));
-                        self.phase_angle += std::f32::consts::TAU * frequency / self.spec_freq as f32;
-                        self.phase_angle = self.phase_angle % std::f32::consts::TAU;
+                        // wave.push(crate::audio_waves::sin_wave(self.phase_angle, self.volume));
+                        // self.phase_angle += std::f32::consts::TAU * frequency / self.spec_freq as f32;
+                        // self.phase_angle = self.phase_angle % std::f32::consts::TAU;
+
+                        wave.push(crate::audio_waves::sin_wave(note.phase_angle, note.volume));
+                        note.increment_phase(self.spec_freq as f32);
                     }
 
                     wave
@@ -149,7 +155,7 @@ impl CustomAudioCallback {
         // set internal frequencies and other values based on sound command
         match sound_command {
             SoundCommand::NoteOff { freq , midi_note } => {
-                if let Some(index_of_note) = self.currently_playing_waveforms.iter().position(|&note| note == midi_note) {
+                if let Some(index_of_note) = self.currently_playing_waveforms.iter().position(|note| note.midi_note == midi_note) {
                     // self.freq = (self.freq - freq).max(0.0_f32);
                     self.currently_playing_waveforms.remove(index_of_note);
                 }
@@ -158,8 +164,11 @@ impl CustomAudioCallback {
                 //     self.volume = 0.0;
                 // }
             }
-            SoundCommand::NoteOn { freq, volume, midi_note } => {
-                if self.currently_playing_waveforms.contains(&midi_note) {
+            SoundCommand::NoteOn { freq, volume, midi_note , .. } => {
+                if self.currently_playing_waveforms.iter().find(|&wave| {
+                    wave.midi_note == midi_note
+                }).is_some() {
+                // if self.currently_playing_waveforms.contains(&midi_note) {
                     // do nothing??
                 } else {
                     // self.freq += freq;
@@ -168,7 +177,12 @@ impl CustomAudioCallback {
                     // self.volume = vol_result;
                     self.volume = 1.;
                     // self.volume = 1.;
-                    self.currently_playing_waveforms.push(midi_note);
+                    self.currently_playing_waveforms.push(Wave {
+                        midi_note: midi_note,
+                        freq: freq,
+                        volume: 1.,
+                        phase_angle: 0.,
+                    });
                 }
             }
         }

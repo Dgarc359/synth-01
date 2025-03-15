@@ -90,24 +90,32 @@ fn run() -> Result<(), Box<dyn Error>> {
     println!("setting up video");
     let video_subsystem = sdl_context.video().unwrap();
 
+    // const WIDTH: usize = 255;
+    // const HEIGHT: usize = 255;
+    // const PITCH: usize = 4 * WIDTH;
+    // const RESOLUTION: usize = WIDTH * HEIGHT * 4;
+
+    const PITCH: usize = 1920;
+
+    const WIDTH: usize = PITCH / 4;
+    const HEIGHT: usize = WIDTH;
+    const RESOLUTION: usize = WIDTH * HEIGHT * 4;
+    
+    const WINDOW_HEIGHT: usize = 1080;
 
     // todo: reduce availability
-    let window = video_subsystem
-        .window("synthesizer-debug-window", 1920, 1080)
+    let video_window = video_subsystem
+        .window("synthesizer-debug-window", PITCH as u32, WINDOW_HEIGHT as u32)
         .position_centered()
         .build()
         .unwrap();
 
-    let mut canvas = window.into_canvas().build().unwrap();
+    let mut canvas = video_window.into_canvas().build().unwrap();
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
 
     let texture_creator = canvas.texture_creator();
 
-    const WIDTH: usize = 255;
-    const HEIGHT: usize = 255;
-    const PITCH: usize = 4 * WIDTH;
-    const RESOLUTION: usize = WIDTH * HEIGHT * 4;
     // create textures
     let mut texture = texture_creator
         .create_texture_streaming(PixelFormatEnum::RGBA8888, WIDTH as u32, HEIGHT as u32)
@@ -147,7 +155,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 .copy(&texture, None, None)
                 .expect("couldnt copy texture to canvas");
 
-            println!("got buf: {:?}", buf)
+            // println!("got buf: {:?}", buf)
         }
         canvas.present();
         for event in event_pump.poll_iter() {
@@ -160,10 +168,6 @@ fn run() -> Result<(), Box<dyn Error>> {
                 _ => {}
             }
         }
-        // input.clear();
-        // if let _ = stdin().read_line(&mut input) { // wait for next enter key press
-        //     break 'running;
-        // }
     }
 
     Ok(())
