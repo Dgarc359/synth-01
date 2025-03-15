@@ -13,7 +13,7 @@ impl Note {
         };
         let channel = message[0] & 15;
         let command = message[0] >> 4;
-        println!("note: {}, channel: {}, command: {}", message[1], channel, command);
+        // println!("note: {}, channel: {}, command: {}", message[1], channel, command);
         match command {
             8 => Some(Note::Off {
                 channel,
