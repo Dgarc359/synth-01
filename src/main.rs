@@ -23,6 +23,8 @@ fn main() {
 fn run() -> Result<(), Box<dyn Error>> {
     let (tx, rx) = channel::<crate::midi::SoundCommand>();
 
+    let (audio_buf_tx, audio_buf_rx) = channel::<Vec<f32>>();
+
     let mut input = String::new();
 
     let mut midi_in = MidiInput::new("midir reading input")?;
@@ -62,6 +64,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             // yield this custom audio callback
             crate::audio_out::CustomAudioCallback {
                 rx,
+                tx: audio_buf_tx,
                 currently_playing_waveforms: vec![],
                 freq: 0.0,
                 phase_angle: 0.0,
@@ -72,6 +75,13 @@ fn run() -> Result<(), Box<dyn Error>> {
         .unwrap();
 
     loop {
+        // if let audi_received = audio_buf_rx.try_recv() {
+        //     match audi_received {
+        //         Ok(buf) => {},
+        //         Err(e) => todo!(),
+        //     }
+            
+        // }
         device.resume();
         input.clear();
         let _ = stdin().read_line(&mut input); // wait for next enter key press

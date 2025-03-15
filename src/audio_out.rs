@@ -3,10 +3,19 @@
 extern crate sdl2;
 
 use sdl2::{audio::{AudioCallback, AudioSpecDesired}, AudioSubsystem};
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, Sender};
 use std::fmt;
 
 use crate::{audio_waves::sin_wave, midi::SoundCommand, util::get_freqy};
+
+use chrono::prelude::{DateTime, Utc};
+use std::time::{Duration, SystemTime};
+
+fn iso8601(st: &std::time::SystemTime) -> String {
+    let dt: DateTime<Utc> = st.clone().into();
+    format!("{}", dt.format("%+"))
+    // formats like "2001-07-08T00:34:60.026490+09:30"
+}
 
 
 /**
@@ -38,7 +47,10 @@ pub fn init_audio_out(samples_per_second: Option<i32>)-> (AudioSubsystem, AudioS
  */
 #[derive(Debug)]
 pub struct CustomAudioCallback {
+    // receive audio commmands
     pub rx: Receiver<SoundCommand>,
+    // forward audio buffer for downstream consumers
+    pub tx: Sender<Vec<f32>>,
     pub currently_playing_waveforms: Vec<u8>,
     pub freq: f32,
     pub phase_angle: f32,
@@ -56,8 +68,11 @@ impl AudioCallback for CustomAudioCallback {
     type Channel = f32;
 
     fn callback(&mut self, out: &mut [f32]) {
+        println!("UNALTERED_AUDIO_BUFFER|{:?}",out);
+        // println!("fresh|timestamp|{}|out_buf|{:?}", iso8601(&SystemTime::now()), out);
         self.receive();
         self.modify_buffer(out);
+        // println!("modified|timestamp|{}|out_buf|{:?}", iso8601(&SystemTime::now()), out);
 
         // println!("self: {}, first 5 outbuf: {:#?}", self, out[0..5].to_vec());
     }
@@ -80,22 +95,31 @@ impl CustomAudioCallback {
             let wave_coefficient = 0.2;
             let volume_bias = 0.5;
 
-            let note_buffers: Vec<Vec<f32>> = self.currently_playing_waveforms
+            let waves: Vec<Vec<f32>> = self.currently_playing_waveforms
                 .iter()
                 .map(|note|  {
-                    let mut new_x: Vec<f32> = vec![];
+                    let mut wave: Vec<f32> = vec![];
                     let frequency = get_freqy(*note);
 
-                    for (i, x) in out_clone.iter().enumerate() {
-                        // new_x.push(crate::audio_waves::sin_wave(self.phase_angle, self.volume));
-                        // self.phase_angle = std::f32::consts::TAU * frequency / self.spec_freq as f32;
-                        // self.phase_angle = self.phase_angle % std::f32::consts::TAU;
+                    // for (i, x) in out_clone.iter().enumerate() {
+                    //     // new_x.push(crate::audio_waves::sin_wave(self.phase_angle, self.volume));
+                    //     // self.phase_angle = std::f32::consts::TAU * frequency / self.spec_freq as f32;
+                    //     // self.phase_angle = self.phase_angle % std::f32::consts::TAU;
 
-                        let phase_angle =  std::f32::consts::TAU * frequency * (i as f32 / self.spec_freq as f32);
-                        new_x.push(phase_angle.sin() * wave_coefficient);
+                    //     let phase_angle =  std::f32::consts::TAU * frequency * (i as f32 / self.spec_freq as f32);
+                    //     wave.push(phase_angle.sin() * wave_coefficient);
+                    // }
+
+
+                    // original, clean sounding wave
+                    // if we want to have a single voice. We can switch to this
+                    for (_, _) in out_clone.iter().enumerate() {
+                        wave.push(crate::audio_waves::sin_wave(self.phase_angle, self.volume));
+                        self.phase_angle += std::f32::consts::TAU * frequency / self.spec_freq as f32;
+                        self.phase_angle = self.phase_angle % std::f32::consts::TAU;
                     }
 
-                    new_x
+                    wave
                 })
                 .collect();
             
@@ -106,8 +130,8 @@ impl CustomAudioCallback {
 
             
             for (i, x) in buffer.iter_mut().enumerate() {
-                for note_buffer in note_buffers.clone() {
-                    *x += note_buffer[i]
+                for wave in waves.clone() {
+                    *x += wave[i]
                 };
 
                 // self.volume = (std::f32::consts::TAU * 0.2 * (i as f32/ 44_100.)).sin();
@@ -116,7 +140,7 @@ impl CustomAudioCallback {
                 self.freq = *x;
             }
 
-            println!("out_buf|{:?}", buffer);
+            // println!("{:?}", buffer)
             // println!("out_buf size: {}", buffer.len())
         }
     }
