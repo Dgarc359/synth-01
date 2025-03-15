@@ -10,7 +10,7 @@ with a sound module deployed onto an esp32 and outputting audio data
 - sdl2: simple audio output solution
 
 # Short term roadmap
-- More graceful error handling
+- polyphonic synthesis
 
 # Long term Roadmap
 - Loadable onto esp32 (kind of awkward since that backdoor dropped)

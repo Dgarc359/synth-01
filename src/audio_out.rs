@@ -24,16 +24,14 @@ fn iso8601(st: &std::time::SystemTime) -> String {
  * The audio spec defines how many samples per second are used when creating an audio
  * waveform
  */
-pub fn init_audio_out(samples_per_second: Option<i32>)-> (AudioSubsystem, AudioSpecDesired) {
-    let sdl_context = sdl2::init().unwrap();
-    let audio_subsystem = sdl_context.audio().unwrap();
+pub fn init_audio_out(samples_per_second: Option<i32>)->AudioSpecDesired {
     let desired_spec = AudioSpecDesired {
         freq: samples_per_second, // default is usually 44_100
         channels: Some(1), // mono
         samples: None,     // default sample size
     };
 
-    (audio_subsystem, desired_spec)
+    desired_spec
 }
 
 
@@ -68,7 +66,8 @@ impl AudioCallback for CustomAudioCallback {
     type Channel = f32;
 
     fn callback(&mut self, out: &mut [f32]) {
-        println!("UNALTERED_AUDIO_BUFFER|{:?}",out);
+        // println!("UNALTERED_AUDIO_BUFFER|{:?}",out);
+        self.tx.send(out.to_vec()).unwrap();
         // println!("fresh|timestamp|{}|out_buf|{:?}", iso8601(&SystemTime::now()), out);
         self.receive();
         self.modify_buffer(out);
