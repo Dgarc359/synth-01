@@ -129,9 +129,9 @@ fn run() -> Result<(), Box<dyn Error>> {
             let y = 0;
             for x in 0..WIDTH {
                 if let val = buf[x] {
-                    let new_val = center_y + (val * 50.) as usize;
+                    let new_val = (center_y as isize) + (val * 50.) as isize;
                     // let i = (x * 4) + (buf[x] * PITCH);
-                    let i = (x * 4) + (new_val * PITCH);
+                    let i = (x * 4) + (PITCH.wrapping_mul(new_val as usize));
                     pixels_as_u8[i] = 0;
                     pixels_as_u8[1 + i] = 255;
                     pixels_as_u8[2 + i] = 255;
