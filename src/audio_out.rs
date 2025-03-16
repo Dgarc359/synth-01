@@ -2,7 +2,7 @@
 extern crate sdl2;
 
 use sdl2::audio::{AudioCallback, AudioSpecDesired};
-use std::{ops::IndexMut, sync::mpsc::{Receiver, Sender}};
+use std::{ops::IndexMut, sync::mpsc::{Receiver, Sender}, thread::current};
 use std::fmt;
 
 use crate::midi::{self, SoundCommand, Wave};
@@ -86,9 +86,13 @@ impl CustomAudioCallback {
     // remove out from currently playing waveforms any waveforms that 
     // have fully decayed
     fn filter_out_decayed_waveforms(&mut self) {
-        self.currently_playing_waveforms = self.currently_playing_waveforms.iter().filter(|&&wave| wave.current_release != wave.min_release).cloned().collect();
-
-        // println!("{:?}", self.currently_playing_waveforms);
+        self.currently_playing_waveforms = self.currently_playing_waveforms.iter().filter(|&&wave| {
+            if let Some(current_wave_env) = wave.envelope.get_current_envelope_state() {
+                true
+            } else {
+                false
+            }       
+        }).cloned().collect();
     }
 
     fn modify_buffer(&mut self, buffer: &mut [f32]) {
@@ -111,15 +115,18 @@ impl CustomAudioCallback {
                     // if we want to have a single voice. We can switch to this
 
                     for (_, _) in out_clone.iter().enumerate() {
-                        let envelope_coefficient = note.envelope.get_normalized_value();
+                        let envelope_coefficient = note.envelope.get_normalized_current_value();
 
-                        let sin_wave_sample = envelope_coefficient * crate::audio_waves::sin_wave(note.phase_angle, note.volume);
+                        println!("current state {:?}, coefficient: {}", note.envelope.get_current_envelope_state(), envelope_coefficient);
+
+                        let sin_wave_sample =  envelope_coefficient * crate::audio_waves::sin_wave(note.phase_angle, note.volume);
 
 
                         wave.push(sin_wave_sample);
 
                         note.envelope.generate_next_value();
-
+                        println!("After generating: current state {:?}, coefficient: {}", note.envelope.get_current_envelope_state(), envelope_coefficient);
+                        println!("generated next value");
                         note.increment_phase(self.spec_freq as f32);
                     }
 
@@ -148,74 +155,87 @@ impl CustomAudioCallback {
     fn handle_sound_command(&mut self, sound_command: SoundCommand) {
         // set internal frequencies and other values based on sound command
         match sound_command {
-            SoundCommand::Encode { midi_note, volume } => {
-                match midi_note {
-                    21 => {
-                        // println!("handling volume encoder");
-                        let normalized_volume = crate::util::normalize(volume as u16, 127, 0);
+            SoundCommand::Encode { midi_note, volume } => self.handle_encoders(midi_note, volume),
+            SoundCommand::NoteOff { midi_note, .. } => self.handle_note_off(midi_note), 
+            SoundCommand::NoteOn { freq, midi_note , .. } => self.handle_note_on(freq, midi_note),
+        }
+    }
 
-                        self.current_master_volume = self.max_master_volume * normalized_volume;
-                        // println!("current vol {}", self.current_master_volume);
-                    }
-                    _ => todo!(),
-                }
+
+    fn create_adsr_envelope(&self) -> AdsrEnvelope {
+        AdsrEnvelope::new( 
+            0,
+            0.,
+            Some(AdsrEnvelopeStates::Attack),
+            AdsrEnvelopeConfig::new(
+                EnvelopeSingleStateConfig::new(
+                    AdsrEnvelopeStates::Attack,
+                    0.,
+                    1., 
+                    300, 
+                    Some(AdsrEnvelopeStates::Delay),
+                ), 
+                EnvelopeSingleStateConfig::new(
+                    AdsrEnvelopeStates::Delay, 
+                    1.,
+                    0.8, 
+                    100, 
+                    Some(AdsrEnvelopeStates::Sustain),
+                ), 
+                EnvelopeSingleStateConfig::new(
+                        AdsrEnvelopeStates::Sustain,
+                    0.8,
+                        0.8,  
+                        255,  
+                        Some(AdsrEnvelopeStates::Release),
+                ), 
+                EnvelopeSingleStateConfig::new(
+                        AdsrEnvelopeStates::Release,
+                        0.8,
+                        0., 
+                        300,  
+                        None,
+                ), 
+            ) 
+        )
+    }
+
+    fn handle_note_on(&mut self, freq: f32, midi_note: u8) {
+        let target_wave = self.currently_playing_waveforms.iter().position(|wave| {wave.midi_note == midi_note});
+
+        match target_wave {
+            None => {
+                self.currently_playing_waveforms.push(Wave {
+                    midi_note: midi_note,
+                    freq: freq,
+                    volume: self.current_master_volume,
+                    phase_angle: 0.,
+
+                    envelope: self.create_adsr_envelope(),
+                });
             }
-            SoundCommand::NoteOff { midi_note, .. } => {
-                if let Some(index_of_note) = self.currently_playing_waveforms.iter().position(|wave| wave.midi_note == midi_note) {
-                    self.currently_playing_waveforms.index_mut(index_of_note).is_releasing = true;
-                }
+            Some(wave_idx) => {
+                let wave = self.currently_playing_waveforms.index_mut(wave_idx);
             }
-            SoundCommand::NoteOn { freq, midi_note , .. } => {
-                let target_wave = self.currently_playing_waveforms.iter().position(|wave| {wave.midi_note == midi_note});
+        }
+    }
 
+    fn handle_note_off(&mut self, midi_note: u8) {
+        if let Some(index_of_note) = self.currently_playing_waveforms.iter().position(|wave| wave.midi_note == midi_note) {
+            self.currently_playing_waveforms.index_mut(index_of_note).envelope.set_current_config_state(Some(AdsrEnvelopeStates::Release));
+        }
+    }
 
-                match target_wave {
-                    None => {
-                        let starting_state: EnvelopeSingleStateConfig = EnvelopeSingleStateConfig::new(
-                            AdsrEnvelopeStates::Attack,
-                            300, 300, Some(AdsrEnvelopeStates::Delay)
-                        );
-                        self.currently_playing_waveforms.push(Wave {
-                            midi_note: midi_note,
-                            freq: freq,
-                            volume: self.current_master_volume,
-                            // volume: 1.,
-                            phase_angle: 0.,
+    fn handle_encoders(&mut self, midi_note: u8, volume: u8) {
+        match midi_note {
+            21 => {
+                // println!("handling volume encoder");
+                let normalized_volume = crate::util::normalize(volume as u16, 127, 0);
 
-                            envelope: AdsrEnvelope::new( 
-                                0,
-                                Some(AdsrEnvelopeStates::Attack),
-                                AdsrEnvelopeConfig::new(
-                                    starting_state, 
-                                    EnvelopeSingleStateConfig::new(
-                                        AdsrEnvelopeStates::Delay, 
-                                        100, 200, Some(AdsrEnvelopeStates::Sustain) ), 
-                                    EnvelopeSingleStateConfig::new(
-                                         AdsrEnvelopeStates::Sustain,
-                                         300,  200,  Some(AdsrEnvelopeStates::Release)), 
-                                    EnvelopeSingleStateConfig::new(
-                                         AdsrEnvelopeStates::Release,
-                                         300,  0, None ), 
-                                ) 
-                            ),
-
-                            current_attack: 0,
-                            min_attack: 0,
-                            max_attack: 300,
-
-                            is_releasing: false,
-                            current_release: 300,
-                            max_release: 300,
-                            min_release: 0,
-                        });
-                    }
-                    Some(wave_idx) => {
-                        let wave = self.currently_playing_waveforms.index_mut(wave_idx);
-                        wave.current_attack = wave.min_attack;
-                        wave.current_release = wave.max_release;
-                    }
-                }
+                self.current_master_volume = self.max_master_volume * normalized_volume;
+                // println!("current vol {}", self.current_master_volume);
             }
+            _ => todo!(),
         }
     }
 }

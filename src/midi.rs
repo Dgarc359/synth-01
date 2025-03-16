@@ -19,20 +19,6 @@ pub struct Wave {
     pub phase_angle: f32, 
 
     pub envelope: AdsrEnvelope,
-    // let's take attack in 'milliseconds' and just decrement
-    // there might be a better value to use for this
-    // I say 'milliseconds' because it's going to be a rough estimate
-    pub current_attack: u16,
-    pub min_attack: u16,
-    pub max_attack: u16,
-
-    pub current_release: u16,
-    pub min_release: u16,
-    pub max_release: u16,
-
-    // TODO: is_decaying and other bools can be in a single int
-    pub is_releasing: bool,
-
 }
 
 impl fmt::Display for Wave {
@@ -42,27 +28,6 @@ impl fmt::Display for Wave {
 }
 
 impl Wave {
-
-    pub fn get_normalized_decay(&self) -> f32 {
-        crate::util::normalize(self.current_release , self.max_release, self.min_release)
-    }
-
-    pub fn decrement_decay(&mut self) {
-        self.current_release = self.current_release.saturating_sub(1);
-    }
-
-    pub fn get_normalized_attack(&self) -> f32 {
-        crate::util::normalize(self.current_attack , self.max_attack, self.min_attack)
-    }
-
-    pub fn increment_attack(&mut self) {
-        self.current_attack = self.current_attack.saturating_add(1).min(self.max_attack);
-    }
-
-    pub fn decrement_attack(&mut self) {
-        self.current_attack = self.current_attack.saturating_sub(1);
-    }
-
     pub fn increment_phase(&mut self, spec_freq: f32) {
         self.phase_angle += std::f32::consts::TAU * self.freq / spec_freq;
         self.phase_angle = self.phase_angle % std::f32::consts::TAU;
