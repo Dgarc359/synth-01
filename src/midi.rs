@@ -1,4 +1,4 @@
-use crate::{util::get_freqy, note::Note};
+use crate::{util::get_freqy, note::Note, envelope::AdsrEnvelope};
 use std::fmt;
 
 /**
@@ -11,12 +11,14 @@ pub enum SoundCommand {
     Encode { midi_note: u8, volume: u8 }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Wave {
     pub midi_note: u8, 
     pub freq: f32, 
     pub volume: f32, 
     pub phase_angle: f32, 
+
+    pub envelope: AdsrEnvelope,
     // let's take attack in 'milliseconds' and just decrement
     // there might be a better value to use for this
     // I say 'milliseconds' because it's going to be a rough estimate
