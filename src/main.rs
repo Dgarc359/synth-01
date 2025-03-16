@@ -137,7 +137,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 let i_coefficient = crate::util::normalize(audio_out.id as u16, 255, 0);
 
 
-                let new_val = (center_y as isize) + (val * 50.) as isize;
+                let new_val = (center_y as isize).wrapping_add((val * 50.) as isize);
                 let i = (x * 4) + (PITCH.wrapping_mul(new_val as usize));
                 pixels_as_u8[i] = (255. * i_coefficient) as u8;
                 pixels_as_u8[1 + i] = 255;
