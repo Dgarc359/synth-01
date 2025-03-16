@@ -18,7 +18,10 @@ in order to have a portable sound module that can be reprogrammed on the fly
 - MIDI thru on esp32 setup
 
 # References
-- https://en.wikipedia.org/wiki/Musical_note#MIDI
+
+> - https://en.wikipedia.org/wiki/Musical_note#MIDI
+> - [Envelope](<https://en.wikipedia.org/wiki/Envelope_(music)#:~:text=In sound and music%2C an,sustain and release (ADSR).>)
+
 
 # Troubleshooting
 

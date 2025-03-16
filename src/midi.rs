@@ -1,4 +1,5 @@
 use crate::{util::get_freqy, note::Note};
+use std::fmt;
 
 /**
  * A sound command comes from a midi device
@@ -9,7 +10,7 @@ pub enum SoundCommand {
     NoteOff { midi_note: u8, freq: f32 },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Wave {
     pub midi_note: u8, 
     pub freq: f32, 
@@ -26,6 +27,15 @@ pub struct Wave {
     pub min_decay: u16,
     pub max_decay: u16,
 
+    // TODO: is_decaying and other bools can be in a single int
+    pub is_decaying: bool,
+
+}
+
+impl fmt::Display for Wave {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "{}", self.freq)
+  }
 }
 
 impl Wave {

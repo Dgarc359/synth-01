@@ -3,7 +3,7 @@
 extern crate sdl2;
 
 use sdl2::{audio::{AudioCallback, AudioSpecDesired}, AudioSubsystem};
-use std::sync::mpsc::{Receiver, Sender};
+use std::{ops::IndexMut, sync::mpsc::{Receiver, Sender}};
 use std::fmt;
 
 use crate::{audio_waves::sin_wave, midi::{self, SoundCommand, Wave}, util::get_freqy};
@@ -85,15 +85,23 @@ impl CustomAudioCallback {
         }
     }
 
+
+    // remove out from currently playing waveforms any waveforms that 
+    // have fully decayed
+    fn filter_out_decayed_waveforms(&mut self) {
+        self.currently_playing_waveforms = self.currently_playing_waveforms.iter().filter(|&&wave| wave.current_decay != wave.min_decay).cloned().collect();
+    }
+
     fn modify_buffer(&mut self, buffer: &mut [f32]) {
+        self.filter_out_decayed_waveforms();
+
+
         if self.currently_playing_waveforms.len() == 0 {
             for x in buffer.iter_mut() {
                 *x = 0.0;
             }
         } else if self.currently_playing_waveforms.len() >= 1 {
             let out_clone = buffer.to_vec();
-            let wave_coefficient = 0.2;
-            let volume_bias = 0.5;
 
             let waves: Vec<Vec<f32>> = self.currently_playing_waveforms
                 .iter_mut()
@@ -104,16 +112,23 @@ impl CustomAudioCallback {
 
                     for (_, _) in out_clone.iter().enumerate() {
                         let normalized_attack = note.get_normalized_attack();
-                        let normalized_decay = note.get_normalized_decay();
+                        let normalized_decay: f32 =  match note.is_decaying {
+                            false => { 1. }
+                            true => { note.get_normalized_decay() }
+                        };
 
 
-                        let sin_wave_sample = normalized_attack * crate::audio_waves::sin_wave(note.phase_angle, note.volume);
+                        let sin_wave_sample = normalized_decay * normalized_attack * crate::audio_waves::sin_wave(note.phase_angle, note.volume);
 
 
                         wave.push(sin_wave_sample);
                         
                         note.increment_attack();
-                        note.decrement_decay();
+
+                        if note.is_decaying {
+                            note.decrement_decay();
+                        }
+
                         note.increment_phase(self.spec_freq as f32);
                     }
 
@@ -149,17 +164,14 @@ impl CustomAudioCallback {
         match sound_command {
             SoundCommand::NoteOff { freq , midi_note } => {
                 if let Some(index_of_note) = self.currently_playing_waveforms.iter().position(|note| note.midi_note == midi_note) {
-                    self.currently_playing_waveforms.remove(index_of_note);
+                    // self.currently_playing_waveforms.remove(index_of_note);
+                    self.currently_playing_waveforms.index_mut(index_of_note).is_decaying = true;
                 }
             }
             SoundCommand::NoteOn { freq, volume, midi_note , .. } => {
                 if self.currently_playing_waveforms.iter().find(|&wave| {
                     wave.midi_note == midi_note
                 }).is_none() {
-                    // self.freq += freq;
-                    // let vol_result = volume / 10_000.0_f32;
-                    // self.volume = vol_result.max(0.5_f32).min(0.5_f32).max(0.0_f32);
-                    // self.volume = vol_result;
                     self.volume = 1.;
                     self.currently_playing_waveforms.push(Wave {
                         midi_note: midi_note,
@@ -171,6 +183,7 @@ impl CustomAudioCallback {
                         min_attack: 0,
                         max_attack: 300,
 
+                        is_decaying: false,
                         current_decay: 300,
                         max_decay: 300,
                         min_decay: 0,
@@ -178,7 +191,5 @@ impl CustomAudioCallback {
                 }
             }
         }
-
-        // println!("finished handling sound command: {}", self.freq);
     }
 }
