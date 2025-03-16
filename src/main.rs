@@ -75,7 +75,8 @@ fn run() -> Result<(), Box<dyn Error>> {
                 rx,
                 tx: audio_buf_tx,
                 currently_playing_waveforms: vec![],
-                master_volume: 0.0,
+                current_master_volume: 1.0,
+                max_master_volume: 1.0,
                 spec_freq: spec.freq,
             }
         })

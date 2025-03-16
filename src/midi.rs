@@ -8,6 +8,7 @@ use std::fmt;
 pub enum SoundCommand {
     NoteOn { midi_note: u8, freq: f32, volume: f32, phase_angle: f32 },
     NoteOff { midi_note: u8, freq: f32 },
+    Encode { midi_note: u8, volume: u8 }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -71,7 +72,11 @@ impl Wave {
 
 
 impl SoundCommand {
-
+    // I asked myself, why are we doing note -> sound command if it basically comes out to the same?
+    // there's some casting, and also Note _technically_ comes from a midi device, where sound command
+    // is relevant to our sdl 2 sound generation domain.
+    // I don't think it's bad to keep both of those separate and then integrate??
+    // it may lead to more bugs in the future, who knows.
     pub fn from_note(note: Note) -> SoundCommand {
         match note {
             Note::On { note, volume, .. } => SoundCommand::NoteOn {
@@ -84,6 +89,11 @@ impl SoundCommand {
                 midi_note: note,
                 freq: get_freqy(note),
             },
+            Note::Encoder { volume, note, .. } => SoundCommand::Encode {
+                volume,
+                midi_note: note,
+            },
+            _ => todo!(),
         }
     }
 }

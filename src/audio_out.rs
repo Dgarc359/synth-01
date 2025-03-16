@@ -1,4 +1,3 @@
-
 // https://github.com/Rust-SDL2/rust-sdl2/blob/master/examples/audio-squarewave.rs
 extern crate sdl2;
 
@@ -47,14 +46,15 @@ pub struct CustomAudioCallback {
     // ex: video ingesting audio buffer and displaying current wave
     pub tx: Sender<AudioOutput>,
     pub currently_playing_waveforms: Vec<midi::Wave>,
-    pub master_volume: f32,
+    pub current_master_volume: f32,
+    pub max_master_volume: f32,
     pub spec_freq: i32,
 }
 
 
 impl fmt::Display for CustomAudioCallback {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "volume: {}, spec_freq: {}", self.master_volume, self.spec_freq)
+    write!(f, "master_volume: {}, spec_freq: {}", self.current_master_volume, self.spec_freq)
   }
 }
 
@@ -69,6 +69,7 @@ impl AudioCallback for CustomAudioCallback {
         self.modify_buffer(out);
         // println!("modified|timestamp|{}|out_buf|{:?}", iso8601(&SystemTime::now()), out);
 
+        // println!("\x1B[2J\x1B[1;1H");
         // println!("self: {}, first 5 outbuf: {:#?}", self, out[0..5].to_vec());
     }
 }
@@ -147,15 +148,26 @@ impl CustomAudioCallback {
                     *x += wave[i]
                 };
 
-                *x = *x * self.master_volume;
+                *x = *x * self.current_master_volume;
             }
         }
     }
 
     fn handle_sound_command(&mut self, sound_command: SoundCommand) {
-        // self.phase_angle = 0.;
         // set internal frequencies and other values based on sound command
         match sound_command {
+            SoundCommand::Encode { midi_note, volume } => {
+                match midi_note {
+                    21 => {
+                        // println!("handling volume encoder");
+                        let normalized_volume = crate::util::normalize(volume as u16, 127, 0);
+
+                        self.current_master_volume = self.max_master_volume * normalized_volume;
+                        // println!("current vol {}", self.current_master_volume);
+                    }
+                    _ => todo!(),
+                }
+            }
             SoundCommand::NoteOff { midi_note, .. } => {
                 if let Some(index_of_note) = self.currently_playing_waveforms.iter().position(|wave| wave.midi_note == midi_note) {
                     self.currently_playing_waveforms.index_mut(index_of_note).is_releasing = true;
@@ -167,11 +179,11 @@ impl CustomAudioCallback {
 
                 match target_wave {
                     None => {
-                        self.master_volume = 1.;
                         self.currently_playing_waveforms.push(Wave {
                             midi_note: midi_note,
                             freq: freq,
-                            volume: 1.,
+                            volume: self.current_master_volume,
+                            // volume: 1.,
                             phase_angle: 0.,
 
                             current_attack: 0,
@@ -179,8 +191,8 @@ impl CustomAudioCallback {
                             max_attack: 300,
 
                             is_releasing: false,
-                            current_release: 12_000,
-                            max_release: 12_000,
+                            current_release: 300,
+                            max_release: 300,
                             min_release: 0,
                         });
                     }

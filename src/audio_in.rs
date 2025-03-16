@@ -1,8 +1,6 @@
-
-use std::error::Error;
 use std::io::{stdin, stdout, Write};
 
-use midir::{Ignore, MidiInput, MidiInputPort};
+use midir::{MidiInput, MidiInputPort};
 
 pub fn get_input_port(midi_in: &MidiInput) -> Option<(MidiInputPort,String)> {
     let in_ports = midi_in.ports();
