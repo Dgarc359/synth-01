@@ -7,6 +7,8 @@ use std::fmt;
 
 use crate::midi::{self, SoundCommand, Wave};
 
+use crate::envelope::{AdsrEnvelope,AdsrEnvelopeStates, AdsrEnvelopeConfig, EnvelopeSingleStateConfig};
+
 
 /**
  * Uses sdl2 to create an audio subsystem and a default desired audio spec
@@ -38,7 +40,6 @@ pub struct AudioOutput {
  * currently_playing_waveforms: An array containing the midi notes currently being played
  * 
  */
-#[derive(Debug)]
 pub struct CustomAudioCallback {
     // receive audio commmands
     pub rx: Receiver<SoundCommand>,
@@ -110,23 +111,14 @@ impl CustomAudioCallback {
                     // if we want to have a single voice. We can switch to this
 
                     for (_, _) in out_clone.iter().enumerate() {
-                        let normalized_attack = note.get_normalized_attack();
-                        let normalized_decay: f32 =  match note.is_releasing {
-                            false => { 1. }
-                            true => { note.get_normalized_decay() }
-                        };
+                        let envelope_coefficient = note.envelope.get_normalized_value();
 
-
-                        let sin_wave_sample = normalized_decay * normalized_attack * crate::audio_waves::sin_wave(note.phase_angle, note.volume);
+                        let sin_wave_sample = envelope_coefficient * crate::audio_waves::sin_wave(note.phase_angle, note.volume);
 
 
                         wave.push(sin_wave_sample);
-                        
-                        note.increment_attack();
 
-                        if note.is_releasing {
-                            note.decrement_decay();
-                        }
+                        note.envelope.generate_next_value();
 
                         note.increment_phase(self.spec_freq as f32);
                     }
@@ -179,12 +171,33 @@ impl CustomAudioCallback {
 
                 match target_wave {
                     None => {
+                        let starting_state: EnvelopeSingleStateConfig = EnvelopeSingleStateConfig::new(
+                            AdsrEnvelopeStates::Attack,
+                            300, 300, Some(AdsrEnvelopeStates::Delay)
+                        );
                         self.currently_playing_waveforms.push(Wave {
                             midi_note: midi_note,
                             freq: freq,
                             volume: self.current_master_volume,
                             // volume: 1.,
                             phase_angle: 0.,
+
+                            envelope: AdsrEnvelope::new( 
+                                0,
+                                Some(AdsrEnvelopeStates::Attack),
+                                AdsrEnvelopeConfig::new(
+                                    starting_state, 
+                                    EnvelopeSingleStateConfig::new(
+                                        AdsrEnvelopeStates::Delay, 
+                                        100, 200, Some(AdsrEnvelopeStates::Sustain) ), 
+                                    EnvelopeSingleStateConfig::new(
+                                         AdsrEnvelopeStates::Sustain,
+                                         300,  200,  Some(AdsrEnvelopeStates::Release)), 
+                                    EnvelopeSingleStateConfig::new(
+                                         AdsrEnvelopeStates::Release,
+                                         300,  0, None ), 
+                                ) 
+                            ),
 
                             current_attack: 0,
                             min_attack: 0,

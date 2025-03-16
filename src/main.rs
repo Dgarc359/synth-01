@@ -14,6 +14,7 @@ mod audio_waves;
 mod note;
 mod midi;
 mod util;
+mod envelope;
 
 
 fn main() {
@@ -35,7 +36,7 @@ fn run() -> Result<(), Box<dyn Error>> {
 
     // Get an input port (read from console if multiple are available)
     let Some((in_port, in_port_name)) = crate::audio_in::get_input_port(&midi_in) else {
-        todo!()
+        todo!("404 -- midi device")
     };
 
     println!("got midi input port, establishing conn");
