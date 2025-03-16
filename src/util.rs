@@ -10,3 +10,11 @@ pub fn get_freqy(i: u8) -> f32 {
     // https://en.wikipedia.org/wiki/Musical_note#MIDI
     return 2.0f32.powf((i as f32 - 69.0) / 12.0) * 440.0;
 }
+
+use chrono::prelude::{DateTime, Utc};
+
+fn iso8601(st: &std::time::SystemTime) -> String {
+    let dt: DateTime<Utc> = st.clone().into();
+    format!("{}", dt.format("%+"))
+    // formats like "2001-07-08T00:34:60.026490+09:30"
+}

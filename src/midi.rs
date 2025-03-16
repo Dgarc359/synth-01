@@ -23,12 +23,12 @@ pub struct Wave {
     pub min_attack: u16,
     pub max_attack: u16,
 
-    pub current_decay: u16,
-    pub min_decay: u16,
-    pub max_decay: u16,
+    pub current_release: u16,
+    pub min_release: u16,
+    pub max_release: u16,
 
     // TODO: is_decaying and other bools can be in a single int
-    pub is_decaying: bool,
+    pub is_releasing: bool,
 
 }
 
@@ -41,11 +41,11 @@ impl fmt::Display for Wave {
 impl Wave {
 
     pub fn get_normalized_decay(&self) -> f32 {
-        crate::util::normalize(self.current_decay , self.max_decay, self.min_decay)
+        crate::util::normalize(self.current_release , self.max_release, self.min_release)
     }
 
     pub fn decrement_decay(&mut self) {
-        self.current_decay = self.current_decay.saturating_sub(1);
+        self.current_release = self.current_release.saturating_sub(1);
     }
 
     pub fn get_normalized_attack(&self) -> f32 {

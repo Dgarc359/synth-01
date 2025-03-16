@@ -1,12 +1,10 @@
 use std::error::Error;
-use std::io::stdin;
 use std::sync::mpsc::channel;
 use std::thread;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::{Color, PixelFormatEnum};
-use std::time::Duration;
 
 use midir::{Ignore, MidiInput};
 
@@ -28,7 +26,7 @@ fn main() {
 fn run() -> Result<(), Box<dyn Error>> {
     let (tx, rx) = channel::<crate::midi::SoundCommand>();
 
-    let (audio_buf_tx, audio_buf_rx) = channel::<Vec<f32>>();
+    let (audio_buf_tx, audio_buf_rx) = channel::<audio_out::AudioOutput>();
 
     let mut midi_in = MidiInput::new("midir reading input").expect("couldnt read midi inputs");
     midi_in.ignore(Ignore::None);
@@ -77,9 +75,7 @@ fn run() -> Result<(), Box<dyn Error>> {
                 rx,
                 tx: audio_buf_tx,
                 currently_playing_waveforms: vec![],
-                freq: 0.0,
-                phase_angle: 0.0,
-                volume: 0.0,
+                master_volume: 0.0,
                 spec_freq: spec.freq,
             }
         })
@@ -133,18 +129,18 @@ fn run() -> Result<(), Box<dyn Error>> {
         audio_device.resume();
         pixels_as_u8.fill(0);
 
-        while let Ok(buf) = audio_buf_rx.try_recv() {
-            let y = 0;
+        while let Ok(audio_out) = audio_buf_rx.try_recv() {
             for x in 0..WIDTH {
-                if let val = buf[x] {
-                    let new_val = (center_y as isize) + (val * 50.) as isize;
-                    // let i = (x * 4) + (buf[x] * PITCH);
-                    let i = (x * 4) + (PITCH.wrapping_mul(new_val as usize));
-                    pixels_as_u8[i] = 0;
-                    pixels_as_u8[1 + i] = 255;
-                    pixels_as_u8[2 + i] = 255;
-                    pixels_as_u8[3 + i] = 255;
-                }
+                let val = audio_out.buf[x];
+                let i_coefficient = crate::util::normalize(audio_out.id as u16, 255, 0);
+
+
+                let new_val = (center_y as isize) + (val * 50.) as isize;
+                let i = (x * 4) + (PITCH.wrapping_mul(new_val as usize));
+                pixels_as_u8[i] = (255. * i_coefficient) as u8;
+                pixels_as_u8[1 + i] = 255;
+                pixels_as_u8[2 + i] = (255. * i_coefficient) as u8;
+                pixels_as_u8[3 + i] = (255. * i_coefficient) as u8;
             }
 
             texture
