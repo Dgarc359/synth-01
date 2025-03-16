@@ -11,10 +11,44 @@ pub enum SoundCommand {
 
 #[derive(Debug)]
 pub struct Wave {
-    pub midi_note: u8, pub freq: f32, pub volume: f32, pub phase_angle: f32
+    pub midi_note: u8, 
+    pub freq: f32, 
+    pub volume: f32, 
+    pub phase_angle: f32, 
+    // let's take attack in 'milliseconds' and just decrement
+    // there might be a better value to use for this
+    // I say 'milliseconds' because it's going to be a rough estimate
+    pub current_attack: u16,
+    pub min_attack: u16,
+    pub max_attack: u16,
+
+    pub current_decay: u16,
+    pub min_decay: u16,
+    pub max_decay: u16,
+
 }
 
 impl Wave {
+
+    pub fn get_normalized_decay(&self) -> f32 {
+        crate::util::normalize(self.current_decay , self.max_decay, self.min_decay)
+    }
+
+    pub fn decrement_decay(&mut self) {
+        self.current_decay = self.current_decay.saturating_sub(1);
+    }
+
+    pub fn get_normalized_attack(&self) -> f32 {
+        crate::util::normalize(self.current_attack , self.max_attack, self.min_attack)
+    }
+
+    pub fn increment_attack(&mut self) {
+        self.current_attack = self.current_attack.saturating_add(1).min(self.max_attack);
+    }
+
+    pub fn decrement_attack(&mut self) {
+        self.current_attack = self.current_attack.saturating_sub(1);
+    }
 
     pub fn increment_phase(&mut self, spec_freq: f32) {
         self.phase_angle += std::f32::consts::TAU * self.freq / spec_freq;
@@ -27,15 +61,6 @@ impl Wave {
 
 
 impl SoundCommand {
-
-
-   pub fn get_phase(&self) -> Option<f32>  {
-    match *self {
-        SoundCommand::NoteOn {phase_angle , ..} =>  { Some(phase_angle) },
-        SoundCommand::NoteOff {.. } => { None }
-    }
-   } 
-
 
     pub fn from_note(note: Note) -> SoundCommand {
         match note {

@@ -2,19 +2,19 @@
 
 An experiment in some very very simple digital signal processing
 
-The goal of this project is to provide a currently undisclosed midi device
+The goal of this project is to provide a novation launchkey mini
 with a sound module deployed onto an esp32 and outputting audio data
+in order to have a portable sound module that can be reprogrammed on the fly
 
 # Key dependencies
 - Midir: programmatic interfacing with midi devices
 - sdl2: simple audio output solution
 
 # Short term roadmap
-- polyphonic synthesis
-
-# Long term Roadmap
 - Loadable onto esp32 (kind of awkward since that backdoor dropped)
 - Some kind of circuitry setup to take usb-c midi and output audio piped to a female 3.5 mm or 6mm audio jack
+
+# Long term Roadmap
 - MIDI thru on esp32 setup
 
 # References

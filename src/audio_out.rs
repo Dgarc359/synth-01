@@ -99,28 +99,21 @@ impl CustomAudioCallback {
                 .iter_mut()
                 .map(|note|  {
                     let mut wave: Vec<f32> = vec![];
-                    // let frequency = get_freqy(*note);
-
-                    // for (i, x) in out_clone.iter().enumerate() {
-                    //     // new_x.push(crate::audio_waves::sin_wave(self.phase_angle, self.volume));
-                    //     // self.phase_angle = std::f32::consts::TAU * frequency / self.spec_freq as f32;
-                    //     // self.phase_angle = self.phase_angle % std::f32::consts::TAU;
-
-                    //     let phase_angle =  std::f32::consts::TAU * frequency * (i as f32 / self.spec_freq as f32);
-                    //     wave.push(phase_angle.sin() * wave_coefficient);
-                    // }
-
-
-                    
                     // original, clean sounding wave
                     // if we want to have a single voice. We can switch to this
 
                     for (_, _) in out_clone.iter().enumerate() {
-                        // wave.push(crate::audio_waves::sin_wave(self.phase_angle, self.volume));
-                        // self.phase_angle += std::f32::consts::TAU * frequency / self.spec_freq as f32;
-                        // self.phase_angle = self.phase_angle % std::f32::consts::TAU;
+                        let normalized_attack = note.get_normalized_attack();
+                        let normalized_decay = note.get_normalized_decay();
 
-                        wave.push(crate::audio_waves::sin_wave(note.phase_angle, note.volume));
+
+                        let sin_wave_sample = normalized_attack * crate::audio_waves::sin_wave(note.phase_angle, note.volume);
+
+
+                        wave.push(sin_wave_sample);
+                        
+                        note.increment_attack();
+                        note.decrement_decay();
                         note.increment_phase(self.spec_freq as f32);
                     }
 
@@ -141,7 +134,7 @@ impl CustomAudioCallback {
 
                 // self.volume = (std::f32::consts::TAU * 0.2 * (i as f32/ 44_100.)).sin();
                 // println!("volume: {}", self.volume);
-                *x = (*x * self.volume) + volume_bias;
+                *x = *x * self.volume;
                 self.freq = *x;
             }
 
@@ -156,32 +149,31 @@ impl CustomAudioCallback {
         match sound_command {
             SoundCommand::NoteOff { freq , midi_note } => {
                 if let Some(index_of_note) = self.currently_playing_waveforms.iter().position(|note| note.midi_note == midi_note) {
-                    // self.freq = (self.freq - freq).max(0.0_f32);
                     self.currently_playing_waveforms.remove(index_of_note);
                 }
-
-                // if self.currently_playing_waveforms.len() == 0 {
-                //     self.volume = 0.0;
-                // }
             }
             SoundCommand::NoteOn { freq, volume, midi_note , .. } => {
                 if self.currently_playing_waveforms.iter().find(|&wave| {
                     wave.midi_note == midi_note
-                }).is_some() {
-                // if self.currently_playing_waveforms.contains(&midi_note) {
-                    // do nothing??
-                } else {
+                }).is_none() {
                     // self.freq += freq;
                     // let vol_result = volume / 10_000.0_f32;
                     // self.volume = vol_result.max(0.5_f32).min(0.5_f32).max(0.0_f32);
                     // self.volume = vol_result;
                     self.volume = 1.;
-                    // self.volume = 1.;
                     self.currently_playing_waveforms.push(Wave {
                         midi_note: midi_note,
                         freq: freq,
                         volume: 1.,
                         phase_angle: 0.,
+
+                        current_attack: 0,
+                        min_attack: 0,
+                        max_attack: 300,
+
+                        current_decay: 300,
+                        max_decay: 300,
+                        min_decay: 0,
                     });
                 }
             }
