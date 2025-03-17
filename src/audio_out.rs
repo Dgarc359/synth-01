@@ -2,7 +2,7 @@
 extern crate sdl2;
 
 use sdl2::audio::{AudioCallback, AudioSpecDesired};
-use std::{ops::IndexMut, sync::mpsc::{Receiver, Sender}, thread::current};
+use std::{ops::IndexMut, sync::mpsc::{Receiver, Sender}};
 use std::fmt;
 
 use crate::midi::{self, SoundCommand, Wave};
@@ -12,7 +12,7 @@ use crate::envelope::{AdsrEnvelope,AdsrEnvelopeStates, AdsrEnvelopeConfig, Envel
 
 /**
  * Uses sdl2 to create an audio subsystem and a default desired audio spec
- * 
+ *
  * The audio spec defines how many samples per second are used when creating an audio
  * waveform
  */
@@ -34,11 +34,11 @@ pub struct AudioOutput {
 
 /**
  * Custom audio callback contains:
- * 
+ *
  * rx: Receiver, which will ingest any new SoundCommands. Recall that a sound command is a midi note with an attached frequency
- * 
+ *
  * currently_playing_waveforms: An array containing the midi notes currently being played
- * 
+ *
  */
 pub struct CustomAudioCallback {
     // receive audio commmands
@@ -83,16 +83,14 @@ impl CustomAudioCallback {
     }
 
 
-    // remove out from currently playing waveforms any waveforms that 
+    // remove out from currently playing waveforms any waveforms that
     // have fully decayed
     fn filter_out_decayed_waveforms(&mut self) {
-        self.currently_playing_waveforms = self.currently_playing_waveforms.iter().filter(|&&wave| {
-            if let Some(current_wave_env) = wave.envelope.get_current_envelope_state() {
-                true
-            } else {
-                false
-            }       
-        }).cloned().collect();
+        self.currently_playing_waveforms = self.currently_playing_waveforms
+            .iter()
+            .filter(|&&wave| wave.envelope.get_current_envelope_state().is_some())
+            .cloned()
+            .collect();
     }
 
     fn modify_buffer(&mut self, buffer: &mut [f32]) {
@@ -135,13 +133,13 @@ impl CustomAudioCallback {
                     wave
                 })
                 .collect();
-            
+
 
             for x in buffer.iter_mut() {
                 *x = 0.;
             }
 
-            
+
             for (i, x) in buffer.iter_mut().enumerate() {
                 for wave in waves.clone() {
                     *x += wave[i]
@@ -156,47 +154,43 @@ impl CustomAudioCallback {
         // set internal frequencies and other values based on sound command
         match sound_command {
             SoundCommand::Encode { midi_note, volume } => self.handle_encoders(midi_note, volume),
-            SoundCommand::NoteOff { midi_note, .. } => self.handle_note_off(midi_note), 
+            SoundCommand::NoteOff { midi_note, .. } => self.handle_note_off(midi_note),
             SoundCommand::NoteOn { freq, midi_note , .. } => self.handle_note_on(freq, midi_note),
         }
     }
 
 
     fn create_adsr_envelope(&self) -> AdsrEnvelope {
-        AdsrEnvelope::new( 
+        AdsrEnvelope::new(
             0,
             0.,
             Some(AdsrEnvelopeStates::Attack),
             AdsrEnvelopeConfig::new(
                 EnvelopeSingleStateConfig::new(
                     AdsrEnvelopeStates::Attack,
-                    0.,
-                    1., 
-                    300, 
-                    Some(AdsrEnvelopeStates::Delay),
-                ), 
-                EnvelopeSingleStateConfig::new(
-                    AdsrEnvelopeStates::Delay, 
                     1.,
-                    0.8, 
-                    100, 
+                    300,
+                    Some(AdsrEnvelopeStates::Delay),
+                ),
+                EnvelopeSingleStateConfig::new(
+                    AdsrEnvelopeStates::Delay,
+                    0.8,
+                    100,
                     Some(AdsrEnvelopeStates::Sustain),
-                ), 
+                ),
                 EnvelopeSingleStateConfig::new(
                         AdsrEnvelopeStates::Sustain,
-                    0.8,
-                        0.8,  
-                        255,  
+                        0.8,
+                        255,
                         Some(AdsrEnvelopeStates::Release),
-                ), 
+                ),
                 EnvelopeSingleStateConfig::new(
                         AdsrEnvelopeStates::Release,
-                        0.8,
-                        0., 
-                        300,  
+                        0.,
+                        300,
                         None,
-                ), 
-            ) 
+                ),
+            )
         )
     }
 
@@ -206,8 +200,8 @@ impl CustomAudioCallback {
         match target_wave {
             None => {
                 self.currently_playing_waveforms.push(Wave {
-                    midi_note: midi_note,
-                    freq: freq,
+                    midi_note,
+                    freq,
                     volume: self.current_master_volume,
                     phase_angle: 0.,
 
@@ -215,7 +209,7 @@ impl CustomAudioCallback {
                 });
             }
             Some(wave_idx) => {
-                let wave = self.currently_playing_waveforms.index_mut(wave_idx);
+                let _ = self.currently_playing_waveforms.index_mut(wave_idx);
             }
         }
     }
