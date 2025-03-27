@@ -1,0 +1,60 @@
+name: Continuous Integration
+
+on:
+  push:
+    tags:
+      # glob pattern: https://gist.github.com/mandrean/372be673f7d44b610e15844592ad56dc
+      - "v*[0-9].*[0-9].*[0-9]*(-rc*(.*[0-9]))"
+    paths-ignore:
+      - "**/README.md"
+      - "docs"
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  # TODO: why is this github token even necessary?
+  # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  rust-checks:
+    name: Rust Checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./idf-controller
+    strategy:
+      fail-fast: false
+      matrix:
+        action:
+          - command: build
+            args: --release
+          - command: fmt
+            args: --all -- --check --color always
+          - command: clippy
+            args: --all-features --workspace -- -D warnings
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: nightly-2023-12-30
+          components: rust-src
+      - name: install rust deps
+        run: |
+          rustup component add rustfmt clippy
+      - name: install ldproxy
+        if: ${{ contains(matrix.action.command, 'build')}}
+        run: cargo install ldproxy
+      - name: Enable caching
+        uses: Swatinem/rust-cache@v2
+      - name: Run command
+        run: cargo ${{ matrix.action.command }} ${{ matrix.action.args }}
+      - name: check files
+        run: ls
+      - uses: actions/upload-artifact@v4
+        if: ${{ contains(matrix.action.command, 'build')}}
+        with:
+          name: output
+          path: idf-controller/target
