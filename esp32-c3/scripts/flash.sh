@@ -18,4 +18,4 @@ case "$1" in
     ;;
 esac
 
-web-flash --chip esp32c3 target/riscv32imc-esp-espidf/${BUILD_MODE}/idf-controller
+espflash target/riscv32imc-esp-espidf/${BUILD_MODE}/esp32-c3-synth-template

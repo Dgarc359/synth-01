@@ -21,6 +21,10 @@ in order to have a portable sound module that can be reprogrammed on the fly
 
 > - https://en.wikipedia.org/wiki/Musical_note#MIDI
 > - [Envelope](<https://en.wikipedia.org/wiki/Envelope_(music)#:~:text=In sound and music%2C an,sustain and release (ADSR).>)
+> - https://en.wikipedia.org/wiki/MIDI#Electrical_specifications
+> - [Not really all you need to know about TRS midi](https://www.morningstar.io/post/all-you-need-to-know-about-trs-midi-connections)
+> - [MIDI for the Arduino - Build a MIDI Input Circuit](https://www.youtube.com/watch?v=GxfHijjn0ZM)
+> - [TEENSY-Synth PART 9: MIDI INPUT](https://www.youtube.com/watch?v=l34CNfwfuIY)
 
 
 # Troubleshooting

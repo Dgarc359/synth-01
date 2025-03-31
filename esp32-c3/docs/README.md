@@ -1,4 +1,4 @@
-# idf_controller
+# esp32_c3_synth_template
 
 ## Dev Containers
 This repository offers Dev Containers supports for:
