@@ -18,4 +18,4 @@ case "$1" in
     ;;
 esac
 
-espflash target/riscv32imc-esp-espidf/${BUILD_MODE}/esp32-c3-synth-template
+espflash flash target/riscv32imc-esp-espidf/${BUILD_MODE}/esp32-c3-synth-template

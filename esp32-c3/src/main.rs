@@ -3,7 +3,7 @@ use esp_idf_svc::hal;
 use esp_idf_svc::hal::delay::Ets;
 use esp_idf_svc::hal::prelude::*;
 
-use esp_idf_hal::delay::Ets;
+use log::info;
 
 fn main() {
     // It is necessary to call this function once. Otherwise some patches to the runtime
@@ -13,10 +13,12 @@ fn main() {
     // Bind the log crate to the ESP Logging facilities
     esp_idf_svc::log::EspLogger::initialize_default();
 
-    log::info!("Hello, world!");
+    info!("Hello, world!");
 
+    info!("creating peripherals");
     let peripherals = Peripherals::take().unwrap();
 
+    info!("creating uart config");
     let uart_config = hal::uart::UartConfig {
         mode: hal::uart::config::Mode::UART,
         // TODO: get a better sense for what baudrate we want to use
@@ -31,9 +33,11 @@ fn main() {
     };
 
 
+    info!("creating rx gpio and uart");
     let rx: hal::gpio::Gpio1 = peripherals.pins.gpio1;
     let uart: hal::uart::UART0 = peripherals.uart0;
 
+    info!("creating uart driver");
     let uart_driver: hal::uart::UartRxDriver = hal::uart::UartRxDriver::new(
         uart,
         rx,
@@ -42,16 +46,31 @@ fn main() {
         &uart_config
     ).expect("Unable to start uart driver!!!!!!!!");
 
+    info!("getting outpin");
     // read_midi(uart_driver);
 
     // we're outputting on the (physical) other side of the esp32-c3 board
     // just to make the wiring less cluttered
     let output_pin = hal::gpio::PinDriver::output(peripherals.pins.gpio2).expect("Failed to create output pin driver!!!");
 
+    info!("setting frequency");
     let middle_c_frequency = 261;
     let note_duration = 1000;
 
+
+    info!("Attempting to read from uart driver");
+
+    // loop {
+    //     info!("busy boxing :)");
+    // }
+    // loop {
+    //     let buf: &mut [u8] = &mut vec![];
+    //     let t = uart_driver.read(buf, 0).unwrap();
+    //     log::info!("{:#?}", t);
+    // }
+
     output_frequency(middle_c_frequency, note_duration, output_pin);
+    // read_midi(uart_driver);
 }
 
 // this will block the caller indefinitely.
@@ -59,8 +78,10 @@ fn read_midi(uart_driver: hal::uart::UartRxDriver<'_>) {
     let mut midi_in = MidiIn::new(uart_driver);
 
     loop {
+        // info!("checking for event");
         if let Ok(event) = midi_in.read() {
-            println!("event: {:#?}", event)
+            // println!("event: {:#?}", event)
+            info!("got event!");
         }
     }
 }
@@ -70,11 +91,14 @@ fn output_frequency(frequency: u32, note_duration: u32, mut outpin: hal::gpio::P
     // for digital write overhead. This might not be necessary
     // with esp
     let half_period = (500_000 / frequency) - 7;
+    let cycles = (( frequency as u64 * note_duration as u64) / 1000) as u64;
     loop {
-        outpin.set_high().expect("Couldn't set pin high");
-        delay_microseconds(half_period);
-        outpin.set_low();
-        delay_microseconds(half_period);
+        for i in 0..cycles {
+            outpin.set_high().expect("Couldn't set pin high");
+            delay_microseconds(half_period);
+            outpin.set_low().expect("Couldn't set pin to LOW");
+            delay_microseconds(half_period);
+        }
     }
 }
 

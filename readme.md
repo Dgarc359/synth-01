@@ -25,6 +25,8 @@ in order to have a portable sound module that can be reprogrammed on the fly
 > - [Not really all you need to know about TRS midi](https://www.morningstar.io/post/all-you-need-to-know-about-trs-midi-connections)
 > - [MIDI for the Arduino - Build a MIDI Input Circuit](https://www.youtube.com/watch?v=GxfHijjn0ZM)
 > - [TEENSY-Synth PART 9: MIDI INPUT](https://www.youtube.com/watch?v=l34CNfwfuIY)
+> - [oscilloscopes, logic analyzers, and multimeters](https://www.youtube.com/watch?v=SSp1wn0Abck)
+> - [PCB tools wiki](https://old.reddit.com/r/PrintedCircuitBoard/wiki/tools)
 
 
 # Troubleshooting
