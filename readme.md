@@ -6,6 +6,10 @@ The goal of this project is to provide a novation launchkey mini
 with a sound module deployed onto an esp32 and outputting audio data
 in order to have a portable sound module that can be reprogrammed on the fly
 
+# Circuitry
+
+![diagram](./docs/whiteboard_01.excalidraw.svg)
+
 # Key dependencies
 - Midir: programmatic interfacing with midi devices
 - sdl2: simple audio output solution
